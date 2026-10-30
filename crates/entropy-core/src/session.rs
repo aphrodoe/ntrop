@@ -69,7 +69,15 @@ impl Session {
 
     /// Records a Glitch Glider tap: absorbed always; credit only when the timing residual has a symbol.
     pub fn glide_tap(&mut self, x: i32, y: i32, t_us: u64) -> Estimate {
-        let e = self.glide.tap(t_us).map_or(Estimate { credit_mbits: 0, healthy: true }, |s| self.glide_mcv.push(s));
+        let e = match self.glide.tap(t_us) {
+            Some(sym) => {
+                let m = self.glide_mcv.push(sym);
+                let (ceil, ok) = self.glide.bound().unwrap_or((0, true));
+                Estimate { credit_mbits: m.credit_mbits.min(ceil), healthy: m.healthy && ok }
+            }
+            // No symbol: nothing earned, and the previous health verdict stands.
+            None => Estimate { credit_mbits: 0, healthy: self.pool.as_ref().is_none_or(|p| p.game_healthy()) },
+        };
         if let Some(p) = self.pool.as_mut() {
             p.add_glide(x, y, t_us, e.credit_mbits, e.healthy);
         }
