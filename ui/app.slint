@@ -9,6 +9,7 @@ import { PainterScreen } from "screens/painter.slint";
 import { OutguessScreen } from "screens/outguess.slint";
 import { HuntScreen } from "screens/hunt.slint";
 import { GlideScreen } from "screens/glide.slint";
+import { ShardScreen } from "screens/shard.slint";
 import { SummaryScreen } from "screens/summary.slint";
 import { WordsScreen } from "screens/words.slint";
 import { SeedQrScreen } from "screens/seedqr.slint";
@@ -29,6 +30,7 @@ export component AppWindow inherits Window {
     if AppState.screen == Screen.outguess: OutguessScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.hunt: HuntScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.glide: GlideScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.shard: ShardScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.summary: SummaryScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.error: ErrorScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.words: WordsScreen { width: parent.width; height: parent.height; }

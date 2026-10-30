@@ -5,6 +5,7 @@ mod camera;
 mod glide;
 mod haptics;
 mod hunt;
+mod shard;
 mod theme;
 
 use std::cell::{Cell, RefCell};
@@ -44,6 +45,9 @@ fn hw_random() -> Result<[u8; 32], ()> {
 
 /// Clears every secret-bearing UI property. Slint's own image copy is freed, not zeroized (accepted).
 fn clear_secrets(st: &AppState) {
+    st.set_shard_cells(ModelRc::from(Rc::new(VecModel::from(vec![0i32; 128]))));
+    st.set_ghost_cells(ModelRc::from(Rc::new(VecModel::from(vec![0i32; 128]))));
+    st.set_shard_note(SharedString::new());
     let empty: Vec<SharedString> = Vec::new();
     st.set_page_words(ModelRc::from(Rc::new(VecModel::from(empty.clone()))));
     st.set_quiz_choices(ModelRc::from(Rc::new(VecModel::from(empty))));
@@ -119,6 +123,12 @@ fn render_qr(digits: &str) -> Image {
     }
     let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&rgba, px as u32, px as u32);
     Image::from_rgba8(buf)
+}
+
+/// Redraws the Shard Stack board and the waiting piece.
+fn sync_shard(st: &AppState, s: &Session, g: &shard::Shard) {
+    st.set_shard_cells(ModelRc::from(Rc::new(VecModel::from(s.shard_cells().iter().map(|&v| v as i32).collect::<Vec<_>>()))));
+    st.set_ghost_cells(ModelRc::from(Rc::new(VecModel::from(entropy_core::shard::Board::ghost(g.piece, g.rot, g.col).iter().map(|&v| v as i32).collect::<Vec<_>>()))));
 }
 
 /// Pushes pool counters (never secrets) into the UI.
@@ -220,11 +230,12 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     let glide = Rc::new(RefCell::new(glide::Glide::new()));
     let pillars: Rc<VecModel<Pillar>> = Rc::new(VecModel::default());
     st.set_pillars(ModelRc::from(pillars.clone()));
+    let shard = Rc::new(RefCell::new(shard::Shard::new(1)));
     let pop = Rc::new(Cell::new(0u32)); // ms left on the "+1 bit" pop
 
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
     let (h, g, ht, pop2) = (hunt.clone(), gesture.clone(), hunt_timer.clone(), pop.clone());
-    let (gl, pl) = (glide.clone(), pillars.clone());
+    let (gl, pl, sh) = (glide.clone(), pillars.clone(), shard.clone());
     st.on_start_arcade(move |n, game| {
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
@@ -241,6 +252,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         st.set_read_pct(0);
         st.set_hunt_pop(SharedString::new());
         st.set_glide_note(SharedString::new());
+        st.set_shard_note(SharedString::new());
         ht.stop(); // the one frame timer serves Hunt and Glider
         st.set_screen(match game {
             1 => Screen::Outguess,
@@ -255,6 +267,13 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
                 *gl.borrow_mut() = glide::Glide::new();
                 start_glide(&ht, &u, &gl, &pl);
                 Screen::Glide
+            }
+            4 => {
+                let seed = hw_random().map_or(0x9e37_79b9 ^ start.elapsed().as_nanos() as u32, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+                *sh.borrow_mut() = shard::Shard::new(seed);
+                s.borrow_mut().shard_spawn(sh.borrow().piece);
+                sync_shard(&st, &s.borrow(), &sh.borrow());
+                Screen::Shard
             }
             _ => Screen::Painter,
         });
@@ -285,6 +304,38 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         let note = if !e.healthy { "Too steady: vary your timing".into() } else { format!("+{:.1} bits", e.credit_mbits as f32 / 1000.0) };
         ui.global::<AppState>().set_glide_note(SharedString::from(note.as_str()));
         credit(&ui, &s.borrow(), &f);
+    });
+
+    let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
+    st.on_shard_move(move |d| {
+        sh.borrow_mut().shift(d);
+        let ui = u.upgrade().unwrap();
+        sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
+    });
+    let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
+    st.on_shard_rotate(move || {
+        sh.borrow_mut().rotate();
+        let ui = u.upgrade().unwrap();
+        sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
+    });
+    let (u, s, f, sh) = (ui.as_weak(), session.clone(), fb.clone(), shard.clone());
+    st.on_shard_drop(move || {
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        let t_us = start.elapsed().as_micros() as u64;
+        let (rot, col) = (sh.borrow().rot, sh.borrow().col);
+        let placed = s.borrow_mut().shard_place(rot, col, t_us);
+        match placed {
+            Some(e) => {
+                let note = if !e.healthy { "Too predictable: try other spots".into() } else { format!("+{:.1} bits", e.credit_mbits as f32 / 1000.0) };
+                st.set_shard_note(SharedString::from(note.as_str()));
+                sh.borrow_mut().next_piece();
+                s.borrow_mut().shard_spawn(sh.borrow().piece);
+                sync_shard(&st, &s.borrow(), &sh.borrow());
+                credit(&ui, &s.borrow(), &f);
+            }
+            None => st.set_shard_note(SharedString::from("No room there")),
+        }
     });
 
     let (u, s) = (ui.as_weak(), session.clone());

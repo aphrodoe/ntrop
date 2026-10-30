@@ -3,7 +3,7 @@
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
-    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, glide::GlideTimer, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
+    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, glide::GlideTimer, shard::{Board, ShardPolicies}, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
 };
 
 pub struct Session {
@@ -17,6 +17,10 @@ pub struct Session {
     oracle: Oracle,
     glide: GlideTimer,
     glide_mcv: Mcv,
+    pub(crate) shard: Board,
+    pub(crate) shard_piece: u8,
+    shard_pol: ShardPolicies,
+    shard_mcv: Mcv,
     rolls: Zeroizing<Vec<u8>>,
 }
 
@@ -33,7 +37,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), glide: GlideTimer::default(), glide_mcv: Mcv::new(32, 2000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), glide: GlideTimer::default(), glide_mcv: Mcv::new(32, 2000), shard: Board::default(), shard_piece: 0, shard_pol: ShardPolicies::default(), shard_mcv: Mcv::new(16, 3000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
     }
 }
 
@@ -82,6 +86,35 @@ impl Session {
             p.add_glide(x, y, t_us, e.credit_mbits, e.healthy);
         }
         e
+    }
+
+    /// Sets the piece to place (from the app's game PRNG; never credited). A piece with no legal placement clears the board.
+    pub fn shard_spawn(&mut self, piece: u8) {
+        self.shard_piece = piece;
+        if self.shard.placements(piece).is_empty() {
+            self.shard.zeroize();
+        }
+    }
+
+    /// Places the current piece. Its placement rank is scored before the drop; credit = min(rank MCV, policy bound).
+    /// `None` if the placement is illegal.
+    pub fn shard_place(&mut self, rot: u8, col: u8, t_us: u64) -> Option<Estimate> {
+        let piece = self.shard_piece;
+        self.shard.landing(piece, rot, col)?;
+        let rank = self.shard.rank(piece, rot, col);
+        self.shard_pol.observe(&self.shard, piece, rot, col, rank);
+        let m = self.shard_mcv.push(rank as u16);
+        let (ceil, ok) = self.shard_pol.bound().unwrap_or((0, true));
+        let e = Estimate { credit_mbits: m.credit_mbits.min(ceil).min(3000), healthy: m.healthy && ok };
+        if let Some(p) = self.pool.as_mut() {
+            p.add_shard(piece, rot, col, t_us, e.credit_mbits, e.healthy);
+        }
+        self.shard.place(piece, rot, col);
+        Some(e)
+    }
+
+    pub fn shard_cells(&self) -> [u8; 128] {
+        self.shard.cells()
     }
 
     pub fn on_shot(&mut self, tap_x: i32, tap_y: i32, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult {
@@ -166,6 +199,10 @@ impl Session {
         self.oracle.wipe();
         self.glide.zeroize();
         self.glide_mcv.wipe();
+        self.shard.zeroize();
+        self.shard_piece = 0;
+        self.shard_pol.zeroize();
+        self.shard_mcv.wipe();
         self.rolls.zeroize();
     }
 

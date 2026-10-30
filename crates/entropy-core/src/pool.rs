@@ -18,6 +18,7 @@ const TAG_CAMERA: u8 = 0x02;
 const TAG_OUTGUESS: u8 = 0x03;
 const TAG_SHOT: u8 = 0x04;
 const TAG_GLIDE: u8 = 0x05;
+const TAG_SHARD: u8 = 0x06;
 const SHOT_MBITS: u32 = 1000;
 const DOMAIN: &[u8] = b"entropy-arcade/v1";
 const TOUCH_BITS_PER_SAMPLE: u32 = 1;
@@ -107,6 +108,11 @@ impl EntropyPool {
     /// Absorbs a Glitch Glider tap (`x ‖ y ‖ t_us`) and adds the MCV timing credit for it.
     pub fn add_glide(&mut self, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {
         self.add_game(TAG_GLIDE, None, x, y, t_us, credit_mbits, healthy);
+    }
+
+    /// Absorbs a Shard Stack placement (`piece ‖ rot ‖ col ‖ t_us`) and adds the rank credit for it.
+    pub fn add_shard(&mut self, piece: u8, rot: u8, col: u8, t_us: u64, credit_mbits: u32, healthy: bool) {
+        self.add_game(TAG_SHARD, Some(piece), rot as i32, col as i32, t_us, credit_mbits, healthy);
     }
 
     fn add_game(&mut self, tag: u8, door: Option<u8>, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {

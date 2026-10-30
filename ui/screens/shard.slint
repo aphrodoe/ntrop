@@ -1,0 +1,88 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState, Neon } from "../state.slint";
+import { Meter } from "../widgets/meter.slint";
+
+export component ShardScreen inherits Rectangle {
+    background: Theme.palette-background;
+    property <length> cell: 24px;
+    property <int> applied: 0;
+    property <bool> dragged: false;
+
+    VerticalLayout {
+        padding: Theme.spacing-xl;
+        padding-top: Theme.spacing-xl * 2;
+        spacing: Theme.spacing-md;
+        Meter { vertical-stretch: 0; }
+        HorizontalLayout {
+            vertical-stretch: 0;
+            spacing: Theme.spacing-md;
+            Button { text: "Home"; variant: ButtonVariant.ghost; clicked => { AppState.back-home(); } }
+            Button {
+                text: "Done";
+                disabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits < AppState.target-bits;
+                clicked => { AppState.painter-done(); }
+            }
+        }
+        Text {
+            text: AppState.shard-note;
+            color: AppState.game-healthy ? Neon.game : Theme.palette-danger;
+            font-family: Theme.font-primary;
+            font-size: Theme.font-size-label;
+            horizontal-alignment: center;
+            vertical-stretch: 0;
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            Rectangle {
+                x: (parent.width - 8 * root.cell) / 2;
+                y: 0px;
+                width: 8 * root.cell;
+                height: 16 * root.cell;
+                background: Neon.raised;
+                clip: true;
+                for v[i] in AppState.shard-cells: Rectangle {
+                    x: mod(i, 8) * root.cell;
+                    y: floor(i / 8) * root.cell;
+                    width: root.cell;
+                    height: root.cell;
+                    background: v == 1 ? Neon.game : transparent;
+                    border-color: v == 1 ? Neon.raised : transparent;
+                    border-width: 1px;
+                }
+                for g[i] in AppState.ghost-cells: Rectangle {
+                    x: mod(i, 8) * root.cell;
+                    y: floor(i / 8) * root.cell;
+                    width: root.cell;
+                    height: root.cell;
+                    background: g == 1 ? Neon.game.transparentize(0.6) : transparent;
+                    border-color: g == 1 ? Theme.palette-foreground : transparent;
+                    border-width: 2px;
+                }
+                TouchArea {
+                    pointer-event(e) => {
+                        if e.kind == PointerEventKind.down { root.applied = 0; root.dragged = false; }
+                        if e.kind == PointerEventKind.up {
+                            if !root.dragged { AppState.shard-rotate(); }
+                            else if self.mouse-y - self.pressed-y > 80px { AppState.shard-drop(); }
+                        }
+                    }
+                    moved => {
+                        if self.pressed {
+                            if abs(self.mouse-x - self.pressed-x) > 8px || abs(self.mouse-y - self.pressed-y) > 8px { root.dragged = true; }
+                            // one column per 52 px of horizontal drag
+                            if abs(self.mouse-y - self.pressed-y) < 80px {
+                                    let raw = (self.mouse-x - self.pressed-x) / 52px;
+                                    let steps = raw < 0 ? ceil(raw) : floor(raw);
+                                    if steps != root.applied { AppState.shard-move(steps - root.applied); root.applied = steps; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Button { text: "Drop"; vertical-stretch: 0; clicked => { AppState.shard-drop(); } }
+    }
+}

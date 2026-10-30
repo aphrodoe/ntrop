@@ -99,7 +99,7 @@ export component HomeScreen inherits Rectangle {
             GameCard { title: "Glitch Glider"; hook: "Tap to fly. Your timing wobble is the noise."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 3); } }
         }
         Row {
-            GameCard { title: "Shard Stack"; hook: "Coming soon."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 0); } } // routes to Painter until Task 15
+            GameCard { title: "Shard Stack"; hook: "Stack shards. Surprise the solver."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 4); } }
             GameCard { title: "Dice Duel"; hook: "Real dice. No chip."; accent: Theme.palette-foreground; clicked => { AppState.start-dice(root.words); } }
         }
     }
@@ -115,7 +115,7 @@ export component HomeScreen inherits Rectangle {
             "We mix your chaos with the chip's randomness: SHA-256(chip + you).",
             "Even if you play badly, it's never weaker than the chip.",
             "Credits are conservative estimates; stale input is rejected live.",
-            "Outguess, Static Hunt and Glitch Glider only pay for what the machine can't predict.",
+            "Outguess, Static Hunt, Glitch Glider and Shard Stack only pay for what the machine can't predict.",
             "Dice Duel uses only your dice, so you can verify it on a laptop."
         ]: Text { text: line; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-body; wrap: word-wrap; }
     }

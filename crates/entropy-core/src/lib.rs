@@ -12,6 +12,7 @@ pub mod quiz;
 pub mod randomart;
 pub mod session;
 pub mod seed;
+pub mod shard;
 
 pub use mcv::{Estimate, Mcv};
 pub use dice::{dice_entropy, min_rolls, DiceError};
