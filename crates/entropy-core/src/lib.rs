@@ -3,8 +3,12 @@
 
 pub mod health;
 pub mod pool;
+pub mod randomart;
+pub mod seed;
 
 pub use pool::{EntropyPool, SampleResult};
+pub use randomart::randomart;
+pub use seed::{master_fingerprint, qr_matrix, seedqr_digits, words};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WordCount {
