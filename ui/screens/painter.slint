@@ -1,93 +1,172 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme } from "@ui/theme.slint";
 import { NavBar } from "../kit/nav_bar.slint";
 import { GlossyButton } from "../kit/glossy_button.slint";
-import { AppState, Neon } from "../state.slint";
-import { Toast, ToastVariant } from "@ui/toast.slint";
-import { Meter } from "../widgets/meter.slint";
+import { AppState, Ios, Neon } from "../state.slint";
+import { GameHud } from "../widgets/game_hud.slint";
 
 export component PainterScreen inherits Rectangle {
-    background: Theme.palette-background;
+    background: #0B0A12;
+    property <bool> started: AppState.touch-bits > 0;
 
-    TouchArea {
-        moved => { AppState.touch(self.mouse-x, self.mouse-y); }
+    GameHud {
+        y: 104px;
+        width: root.width;
+        healthy: AppState.touch-healthy && (!AppState.camera-on || AppState.camera-healthy);
+        hint: !AppState.touch-healthy ? "Touch rejected. Vary your strokes."
+            : AppState.camera-on && !AppState.camera-healthy ? "Camera stalled. Your touch still counts."
+            : root.started ? "Keep moving. Fresh strokes add entropy."
+            : "Press and scribble to add your own randomness.";
     }
-    for d in AppState.trail: Rectangle {
-        x: d.x - 12px;
-        y: d.y - 12px;
-        width: 24px;
-        height: 24px;
-        border-radius: 12px;
-        background: Neon.touch.with-alpha(0.12);
-        opacity: 1 - d.age;
+
+    canvas := Rectangle {
+        x: 12px;
+        y: 208px;
+        width: root.width - 24px;
+        height: root.height - 310px;
+        border-radius: 14px;
+        border-width: 1px;
+        border-color: Neon.line;
+        background: #100F1B;
+        clip: true;
+
+        if !root.started: Image {
+            x: (parent.width - 64px) / 2;
+            y: parent.height / 2 - 82px;
+            width: 64px;
+            height: 64px;
+            source: @image-url("../../resources/icons/paintbrush.svg");
+            image-fit: contain;
+            opacity: 0.5;
+        }
+        if !root.started: Text {
+            x: 24px;
+            y: parent.height / 2 + 4px;
+            width: parent.width - 48px;
+            height: 30px;
+            text: "Press and scribble";
+            color: #C3BFE0;
+            font-family: Ios.font;
+            font-size: 22px;
+            horizontal-alignment: center;
+        }
+        if !root.started: Text {
+            x: 24px;
+            y: parent.height / 2 + 38px;
+            width: parent.width - 48px;
+            height: 22px;
+            text: "Varied movement earns entropy";
+            color: #9A94B8;
+            font-family: Ios.font;
+            font-size: 15px;
+            horizontal-alignment: center;
+        }
+
+        // Stored points are window-relative; render them in this bounded canvas.
+        // One model traversal, with three inexpensive layers per fading dot.
+        for d in AppState.trail: Rectangle {
+            x: d.x - canvas.x - 12px;
+            y: d.y - canvas.y - 12px;
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background: Neon.touch.with-alpha(0.12);
+            opacity: max(0, 1 - d.age);
+            Rectangle {
+                x: 3px;
+                y: 3px;
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                background: Neon.touch.with-alpha(0.25);
+            }
+            Rectangle {
+                x: 6px;
+                y: 6px;
+                width: 12px;
+                height: 12px;
+                border-radius: 6px;
+                background: Neon.touch;
+            }
+        }
+
+        if AppState.camera-on: Rectangle {
+            x: parent.width - 100px;
+            y: 12px;
+            width: 88px;
+            height: 88px;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Neon.camera;
+            background: #15131F;
+            clip: true;
+            Image {
+                x: 2px;
+                y: 2px;
+                width: 84px;
+                height: 84px;
+                source: AppState.camera-preview;
+                image-rendering: pixelated;
+                image-fit: fill;
+            }
+        }
+        if AppState.camera-note != "": Rectangle {
+            x: 12px;
+            y: parent.height - 80px;
+            width: parent.width - 24px;
+            height: 68px;
+            border-radius: 8px;
+            border-width: 1px;
+            border-color: Neon.line;
+            background: #1E1B2C;
+            Text {
+                x: 12px;
+                y: 8px;
+                width: parent.width - 24px;
+                height: parent.height - 16px;
+                text: AppState.camera-note;
+                color: #C3BFE0;
+                font-family: Ios.font;
+                font-size: 15px;
+                wrap: word-wrap;
+                vertical-alignment: center;
+            }
+        }
+        TouchArea {
+            moved => {
+                if self.pressed {
+                    AppState.touch(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+                }
+            }
+        }
     }
-    for d in AppState.trail: Rectangle {
-        x: d.x - 9px;
-        y: d.y - 9px;
-        width: 18px;
-        height: 18px;
-        border-radius: 9px;
-        background: Neon.touch.with-alpha(0.25);
-        opacity: 1 - d.age;
-    }
-    for d in AppState.trail: Rectangle {
-        x: d.x - 6px;
-        y: d.y - 6px;
-        width: 12px;
-        height: 12px;
-        border-radius: 6px;
-        background: Neon.touch;
-        opacity: 1 - d.age;
-    }
-    Text {
-        y: parent.height / 2;
-        width: parent.width;
-        text: "Scribble anywhere";
-        color: Theme.palette-muted.with-alpha(0.5);
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
-    }
-    VerticalLayout {
-        y: 116px;
-        height: 90px;
-        x: Theme.spacing-xl;
-        width: parent.width - Theme.spacing-xl * 2;
-        Meter { }
-    }
-    if AppState.camera-on: Image {
-        x: parent.width - Theme.spacing-xl - 96px;
-        y: 206px;
-        width: 96px;
-        height: 96px;
-        source: AppState.camera-preview;
-        image-rendering: pixelated;
-    }
-    if AppState.camera-note != "": Text {
-        x: parent.width / 2;
-        y: 206px;
-        text: AppState.camera-note;
-        color: Theme.palette-danger;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-    }
-    if !AppState.touch-healthy: Toast {
-        y: parent.height - 64px - Theme.spacing-xl * 2 - 120px;
-        width: parent.width;
-        height: 120px;
-        variant: ToastVariant.error;
-        message: "Touch rejected: keep moving";
-    }
+
     GlossyButton {
-        x: Theme.spacing-xl;
-        y: parent.height - self.height - Theme.spacing-xl;
-        width: parent.width - Theme.spacing-xl * 2;
-        text: AppState.camera-on ? "Camera: on" : "Camera: off";
+        x: 16px;
+        y: root.height - 84px;
+        width: 176px;
+        text: AppState.camera-on ? "Camera on" : "Camera off";
         clicked => { AppState.toggle-camera(); }
     }
+    Text {
+        x: 208px;
+        y: root.height - 84px;
+        width: root.width - 224px;
+        height: 58px;
+        text: AppState.camera-on ? "LavaRand boosts your drawing. Touch still leads."
+            : "Optional camera noise, added only while you draw.";
+        color: #9A94B8;
+        font-family: Ios.font;
+        font-size: 14px;
+        wrap: word-wrap;
+        vertical-alignment: center;
+    }
     NavBar {
-        y: 40px; width: root.width; title: "Chaos Painter"; back-label: "Home"; right-label: "Done";
+        y: 40px;
+        width: root.width;
+        title: "Chaos Painter";
+        back-label: "Home";
+        right-label: "Done";
         right-enabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;
         back => { AppState.back-home(); }
         right => { AppState.painter-done(); }

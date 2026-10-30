@@ -3,7 +3,7 @@
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
-    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, glide::GlideTimer, shard::{Board, ShardPolicies}, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
+    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, shard::{Board, ShardPolicies}, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
 };
 
 pub struct Session {
@@ -15,8 +15,6 @@ pub struct Session {
     quiz: Vec<QuizQuestion>,
     step: usize,
     oracle: Oracle,
-    glide: GlideTimer,
-    glide_mcv: Mcv,
     pub(crate) shard: Board,
     pub(crate) shard_piece: u8,
     shard_pol: ShardPolicies,
@@ -37,7 +35,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), glide: GlideTimer::default(), glide_mcv: Mcv::new(32, 2000), shard: Board::default(), shard_piece: 0, shard_pol: ShardPolicies::default(), shard_mcv: Mcv::new(16, 3000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), shard: Board::default(), shard_piece: 0, shard_pol: ShardPolicies::default(), shard_mcv: Mcv::new(16, 3000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
     }
 }
 
@@ -69,24 +67,6 @@ impl Session {
             p.add_outguess(door, x, y, t_us, m.credit_mbits, m.healthy);
         }
         m
-    }
-
-    /// Records a Glitch Glider tap: absorbed always; credit only when the timing residual has a symbol.
-    pub fn glide_tap(&mut self, x: i32, y: i32, t_us: u64) -> Estimate {
-        let e = match self.glide.tap(t_us) {
-            Some(sym) => {
-                let m = self.glide_mcv.push(sym);
-                let (ceil, ok) = self.glide.bound().unwrap_or((0, true));
-                let healthy = m.healthy && ok;
-                Estimate { credit_mbits: if healthy { m.credit_mbits.min(ceil) } else { 0 }, healthy }
-            }
-            // No symbol: nothing earned, and the previous health verdict stands.
-            None => Estimate { credit_mbits: 0, healthy: self.pool.as_ref().is_none_or(|p| p.game_healthy()) },
-        };
-        if let Some(p) = self.pool.as_mut() {
-            p.add_glide(x, y, t_us, e.credit_mbits, e.healthy);
-        }
-        e
     }
 
     /// Sets the piece to place (from the app's game PRNG; never credited). A piece with no legal placement clears the board.
@@ -124,6 +104,19 @@ impl Session {
 
     pub fn shard_cells(&self) -> [u8; 128] {
         self.shard.cells()
+    }
+
+    /// Current hard-drop geometry only: does not place, rank, absorb, or credit anything.
+    pub fn shard_preview(&self, rot: u8, col: u8) -> Zeroizing<[u8; 128]> {
+        let mut preview = Zeroizing::new([0u8; 128]);
+        if let Some(bottom) = self.shard.landing(self.shard_piece, rot, col) {
+            let cells = crate::shard::shape(self.shard_piece, rot);
+            let top = bottom - cells.iter().map(|c| c.1).max().unwrap_or(0);
+            for (x, y) in cells {
+                preview[(top + y) as usize * 8 + (col + x) as usize] = 1;
+            }
+        }
+        preview
     }
 
     pub fn on_shot(&mut self, tap_x: i32, tap_y: i32, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult {
@@ -206,8 +199,6 @@ impl Session {
         self.quiz = Vec::new(); // QuizQuestion zeroizes on drop
         self.step = 0;
         self.oracle.wipe();
-        self.glide.zeroize();
-        self.glide_mcv.wipe();
         self.shard.zeroize();
         self.shard_piece = 0;
         self.shard_pol.zeroize();
@@ -296,6 +287,53 @@ impl Drop for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn shard_preview_matches_actual_drop_without_crediting() {
+        let mut s = Session::new();
+        s.start_arcade(WordCount::Twelve);
+        s.shard_spawn(0);
+        let before = s.pool().unwrap().credited_bits();
+        let preview = s.shard_preview(0, 2);
+        assert_eq!(preview.iter().filter(|&&v| v == 1).count(), 3);
+        assert!(preview[122..125].iter().all(|&v| v == 1));
+        assert_eq!(s.pool().unwrap().credited_bits(), before);
+        assert!(s.shard_cells().iter().all(|&v| v == 0));
+        s.shard_place(0, 2, 1).unwrap();
+        assert_eq!(&s.shard_cells(), &*preview);
+    }
+
+    #[test]
+    fn shard_preview_never_absorbs_or_credits() {
+        let play = |preview: bool| {
+            let mut s = Session::new();
+            s.start_arcade(WordCount::Twelve);
+            for t in 0..40u64 {
+                s.shard_spawn((t % 7) as u8);
+                let before = s.pool().unwrap().credited_bits();
+                if preview {
+                    for rot in 0..4 { for col in 0..8 { let _ = s.shard_preview(rot, col); } }
+                }
+                assert_eq!(s.pool().unwrap().credited_bits(), before);
+                let (rot, col) = s.shard.placements(s.shard_piece)[0];
+                s.shard_place(rot, col, t * 1_000).unwrap();
+            }
+            let bits = s.pool().unwrap().credited_bits();
+            s.generate(Ok([7; 32])).unwrap();
+            (bits, s.words().to_vec())
+        };
+        assert_eq!(play(true), play(false));
+    }
+
+    #[test]
+    fn blocked_shard_preview_is_empty() {
+        let mut s = Session::new();
+        s.start_arcade(WordCount::Twelve);
+        for t in 0..5 {
+            s.shard_spawn(0);
+            s.shard_place(1, 0, t).unwrap();
+        }
+        assert!(s.shard_preview(1, 0).iter().all(|&v| v == 0));
+    }
     #[test] fn camera_frame_without_pool_is_uncredited() { let mut s = Session::new(); assert_eq!(s.on_camera_frame(&[1, 2, 3], 0), SampleResult::Uncredited); }
     fn frame(seed: u32) -> Vec<u8> {
         let mut x = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
@@ -362,7 +400,6 @@ mod tests {
         for i in 0..64u32 { s.outguess_pick(sha2::Sha256::digest(i.to_le_bytes())[0] & 3, 1, 2, i as u64); }
         assert!(s.pool().unwrap().game_bits() > 0);
     }
-    #[test] fn wipe_resets_glide() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); for i in 0..20u64 { s.glide_tap(1, 1, i * 400_000); } s.wipe(); s.start_arcade(WordCount::Twelve); assert!(s.glide.tap(0).is_none() && s.glide_mcv.push(1).credit_mbits == 0); }
     #[test] fn on_shot_feeds_pool() { let mut s = Session::new(); assert_eq!(s.on_shot(0, 0, 1, 2, 0), SampleResult::Uncredited); s.start_arcade(WordCount::Twelve); s.on_shot(5, 5, 1, 2, 0); s.on_shot(9, 12, 4, 7, 1); assert_eq!(s.pool().unwrap().game_bits(), 1); }
     #[test] fn dice_session_matches_core() {
         let r: Vec<u8> = "12345612345612345612345612345612345612345612345612".bytes().map(|b| b - b'0').collect();

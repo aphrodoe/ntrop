@@ -21,6 +21,7 @@ struct Ghost {
 }
 
 pub struct Hunt {
+    pub last_hit: bool,
     angle: f32,
     ghosts: Vec<Ghost>,
     spawn_cd: i32,
@@ -34,7 +35,7 @@ fn wall(x: i32, y: i32) -> bool {
 
 impl Hunt {
     pub fn new(seed: u32) -> Self {
-        let mut h = Self { angle: 0.0, ghosts: Vec::new(), spawn_cd: 0, bursts: Vec::new(), rng: seed.max(1) };
+        let mut h = Self { last_hit: false, angle: 0.0, ghosts: Vec::new(), spawn_cd: 0, bursts: Vec::new(), rng: seed.max(1) };
         for _ in 0..MAX_GHOSTS {
             h.spawn();
         }
@@ -89,6 +90,7 @@ impl Hunt {
 
     /// Miss offset from the nearest on-screen ghost centre (None: no ghost on screen). A shot inside the half-width bursts it.
     pub fn tap(&mut self, x: i32, y: i32) -> Option<(i32, i32)> {
+        self.last_hit = false;
         let (i, (cx, cy, hw)) = self
             .ghosts
             .iter()
@@ -97,6 +99,7 @@ impl Hunt {
             .min_by_key(|&(_, (cx, cy, _))| (x - cx).pow(2) + (y - cy).pow(2))?;
         let (dx, dy) = (x - cx, y - cy);
         if dx * dx + dy * dy <= hw * hw {
+            self.last_hit = true;
             self.ghosts.remove(i);
             self.bursts.push((cx, cy, BURST_MS));
         }

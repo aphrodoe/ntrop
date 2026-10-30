@@ -2,80 +2,151 @@
 
 import { Theme } from "@ui/theme.slint";
 import { NavBar } from "../kit/nav_bar.slint";
-import { GlossyButton } from "../kit/glossy_button.slint";
-import { AppState, Neon } from "../state.slint";
-import { Meter } from "../widgets/meter.slint";
+import { AppState, Ios, Neon } from "../state.slint";
+import { GameHud } from "../widgets/game_hud.slint";
+
+// Immediate game actions: one press, one move. Holding never repeats a placement.
+component ShardControl inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    callback activated();
+    height: 64px;
+    Image {
+        width: parent.width; height: parent.height;
+        source: root.primary || ta.pressed ? @image-url("../../resources/icons/sheet-button-on.svg", nine-slice(12)) : @image-url("../../resources/icons/key.svg", nine-slice(12));
+    }
+    Text { text: root.text; color: #FFFFFF; font-family: Ios.font; font-size: 18px; font-weight: 700; horizontal-alignment: center; vertical-alignment: center; }
+    if ta.pressed: Rectangle { background: #00000026; border-radius: 10px; }
+    ta := TouchArea {
+        pointer-event(e) => { if e.kind == PointerEventKind.down { root.activated(); } }
+    }
+}
 
 export component ShardScreen inherits Rectangle {
     background: Theme.palette-background;
-    property <length> cell: 24px;
+    property <length> cell: 30px;
     property <int> applied: 0;
-    property <bool> dragged: false;
+    // 0 = unclassified tap, 1 = sideways, 2 = vertical; never change axes mid-swipe.
+    property <int> axis: 0;
+
+    GameHud {
+        y: 104px; width: root.width;
+        healthy: AppState.game-healthy && AppState.shard-note != "No room there";
+        hint: AppState.shard-note == "No room there" ? "No room here. Move or rotate the piece."
+            : AppState.shard-note == "Fresh board. Your bits are kept." ? AppState.shard-note
+            : !AppState.game-healthy ? "Predictable placements. Try other spots."
+            : AppState.shard-placements < 16 ? "Learning your choices: " + AppState.shard-placements + " / 16 placements"
+            : AppState.shard-note != "" ? AppState.shard-note : "Choose a spot. The outline shows your landing.";
+    }
+
+    // All 8x16 cells stay visible; the selected landing is geometry, never a recommended move.
+    board := Rectangle {
+        x: (root.width - 8 * root.cell) / 2; y: 200px;
+        width: 8 * root.cell; height: 16 * root.cell;
+        background: #111725; border-width: 1px; border-color: #46516A; clip: true;
+        for column in 7: Rectangle { x: (column + 1) * root.cell; width: 1px; height: parent.height; background: #30384A; }
+        for row in 15: Rectangle { y: (row + 1) * root.cell; height: 1px; width: parent.width; background: #30384A; }
+
+        for v[i] in AppState.shard-cells: Rectangle {
+            visible: v == 1;
+            x: mod(i, 8) * root.cell + 1px; y: floor(i / 8) * root.cell + 1px;
+            width: root.cell - 2px; height: root.cell - 2px; border-radius: 3px;
+            background: #7050BB; border-width: 1px; border-color: #AE91ED;
+            Rectangle { x: 3px; y: 3px; width: parent.width - 6px; height: 3px; background: #FFFFFF3B; }
+            Rectangle { x: 3px; y: parent.height - 5px; width: parent.width - 6px; height: 2px; background: #00000040; }
+        }
+        for landing[i] in AppState.landing-cells: Rectangle {
+            visible: landing == 1;
+            x: mod(i, 8) * root.cell + 2px; y: floor(i / 8) * root.cell + 2px;
+            width: root.cell - 4px; height: root.cell - 4px; border-radius: 3px;
+            background: Neon.game.with-alpha(0.12); border-width: 2px; border-color: #BB9CFF;
+        }
+        for g[i] in AppState.ghost-cells: Rectangle {
+            visible: g == 1;
+            x: mod(i, 8) * root.cell + 1px; y: floor(i / 8) * root.cell + 1px;
+            width: root.cell - 2px; height: root.cell - 2px; border-radius: 3px;
+            background: #C8AEFF; border-width: 2px; border-color: #F1E8FF;
+            Rectangle { x: 5px; y: 5px; width: parent.width - 10px; height: 3px; background: #FFFFFF80; }
+        }
+    }
 
     VerticalLayout {
-        padding: Theme.spacing-xl;
-        padding-top: 116px;
-        spacing: Theme.spacing-md;
-        Meter { vertical-stretch: 0; }
-        Text {
-            text: AppState.shard-note;
-            color: AppState.game-healthy ? Neon.game : Theme.palette-danger;
-            font-family: Theme.font-primary;
-            font-size: Theme.font-size-label;
-            horizontal-alignment: center;
-            vertical-stretch: 0;
+        x: 14px; y: 219px; width: 90px; height: 174px; spacing: 5px;
+        Text { text: "LINES"; color: #9DA9C1; font-family: Ios.font; font-size: 13px; font-weight: 700; horizontal-alignment: center; }
+        Text { text: AppState.shard-lines; color: #E9DDFF; font-family: Ios.font; font-size: 32px; font-weight: 700; horizontal-alignment: center; }
+        Rectangle { height: 18px; }
+        Text { text: "PLACED"; color: #9DA9C1; font-family: Ios.font; font-size: 13px; font-weight: 700; horizontal-alignment: center; }
+        Text { text: AppState.shard-placements; color: #E9DDFF; font-family: Ios.font; font-size: 25px; font-weight: 700; horizontal-alignment: center; }
+    }
+
+    VerticalLayout {
+        x: root.width - 100px; y: 221px; width: 88px; height: 124px; spacing: 12px;
+        HorizontalLayout {
+            spacing: 7px;
+            Rectangle { width: 15px; height: 15px; background: #C8AEFF; border-width: 1px; border-color: #F1E8FF; }
+            Text { text: "Piece"; color: #C8D0E0; font-family: Ios.font; font-size: 13px; }
         }
-        Rectangle {
-            vertical-stretch: 1;
-            Rectangle {
-                x: (parent.width - 8 * root.cell) / 2;
-                y: 0px;
-                width: 8 * root.cell;
-                height: 16 * root.cell;
-                background: Neon.raised;
-                clip: true;
-                for v[i] in AppState.shard-cells: Rectangle {
-                    x: mod(i, 8) * root.cell;
-                    y: floor(i / 8) * root.cell;
-                    width: root.cell;
-                    height: root.cell;
-                    background: v == 1 ? Neon.game : transparent;
-                    border-color: v == 1 ? Neon.raised : transparent;
-                    border-width: 1px;
+        HorizontalLayout {
+            spacing: 7px;
+            Rectangle { width: 15px; height: 15px; background: transparent; border-width: 2px; border-color: #BB9CFF; }
+            Text { text: "Landing"; color: #C8D0E0; font-family: Ios.font; font-size: 13px; }
+        }
+        HorizontalLayout {
+            spacing: 7px;
+            Rectangle { width: 15px; height: 15px; background: #7050BB; border-width: 1px; border-color: #AE91ED; }
+            Text { text: "Stack"; color: #C8D0E0; font-family: Ios.font; font-size: 13px; }
+        }
+    }
+
+    // The full-width field accepts gestures, including the gutters beside the board.
+    TouchArea {
+        y: 200px; width: root.width; height: 480px;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down { root.applied = 0; root.axis = 0; }
+            if e.kind == PointerEventKind.up {
+                let dx = self.mouse-x - self.pressed-x;
+                let dy = self.mouse-y - self.pressed-y;
+                if root.axis == 0 && (abs(dx) > 10px || abs(dy) > 10px) {
+                    root.axis = abs(dy) > abs(dx) * 1.15 ? 2 : 1;
                 }
-                for g[i] in AppState.ghost-cells: Rectangle {
-                    x: mod(i, 8) * root.cell;
-                    y: floor(i / 8) * root.cell;
-                    width: root.cell;
-                    height: root.cell;
-                    background: g == 1 ? Neon.game.transparentize(0.6) : transparent;
-                    border-color: g == 1 ? Theme.palette-foreground : transparent;
-                    border-width: 2px;
-                }
-                TouchArea {
-                    pointer-event(e) => {
-                        if e.kind == PointerEventKind.down { root.applied = 0; root.dragged = false; }
-                        if e.kind == PointerEventKind.up {
-                            if !root.dragged { AppState.shard-rotate(); }
-                            else if self.mouse-y - self.pressed-y > 80px { AppState.shard-drop(); }
-                        }
-                    }
-                    moved => {
-                        if self.pressed {
-                            if abs(self.mouse-x - self.pressed-x) > 8px || abs(self.mouse-y - self.pressed-y) > 8px { root.dragged = true; }
-                            // one column per 52 px of horizontal drag
-                            if abs(self.mouse-y - self.pressed-y) < 80px {
-                                    let raw = (self.mouse-x - self.pressed-x) / 52px;
-                                    let steps = raw < 0 ? ceil(raw) : floor(raw);
-                                    if steps != root.applied { AppState.shard-move(steps - root.applied); root.applied = steps; }
-                            }
-                        }
-                    }
+                if root.axis == 0 { AppState.shard-rotate(); }
+                else if root.axis == 2 && dy > 60px { AppState.shard-drop(); }
+                else if root.axis == 1 {
+                    let raw = dx / root.cell;
+                    let steps = raw < 0 ? ceil(raw) : floor(raw);
+                    if steps != root.applied { AppState.shard-move(steps - root.applied); root.applied = steps; }
                 }
             }
         }
-        GlossyButton { text: "Drop"; vertical-stretch: 0; clicked => { AppState.shard-drop(); } }
+        moved => {
+            if self.pressed {
+                let dx = self.mouse-x - self.pressed-x;
+                let dy = self.mouse-y - self.pressed-y;
+                if root.axis == 0 && (abs(dx) > 10px || abs(dy) > 10px) {
+                    root.axis = abs(dy) > abs(dx) * 1.15 ? 2 : 1;
+                }
+                if root.axis == 1 {
+                    let raw = dx / root.cell;
+                    let steps = raw < 0 ? ceil(raw) : floor(raw);
+                    if steps != root.applied { AppState.shard-move(steps - root.applied); root.applied = steps; }
+                }
+            }
+        }
     }
+
+    HorizontalLayout {
+        x: 12px; y: 700px; width: root.width - 24px; height: 64px; spacing: 8px;
+        ShardControl { width: 78px; text: "Left"; activated => { AppState.shard-move(-1); } }
+        ShardControl { width: 128px; text: "Rotate"; activated => { AppState.shard-rotate(); } }
+        ShardControl { width: 78px; text: "Right"; activated => { AppState.shard-move(1); } }
+        ShardControl { width: 148px; text: "Drop"; primary: true; activated => { AppState.shard-drop(); } }
+    }
+    Text {
+        x: 12px; y: 777px; width: root.width - 24px; height: 18px;
+        text: "Drag: move    Tap: rotate    Down: drop";
+        color: #A2ADC2; font-family: Ios.font; font-size: 14px; horizontal-alignment: center;
+    }
+
     NavBar {
         y: 40px; width: root.width; title: "Shard Stack"; back-label: "Home"; right-label: "Done";
         right-enabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;

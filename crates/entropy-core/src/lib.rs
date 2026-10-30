@@ -3,7 +3,6 @@
 
 pub mod dice;
 pub mod feedback;
-pub mod glide;
 pub mod health;
 pub mod mcv;
 pub mod outguess;

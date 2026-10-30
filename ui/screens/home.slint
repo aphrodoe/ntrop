@@ -9,7 +9,7 @@ import { GroupedCell } from "../kit/grouped_cell.slint";
 
 // iPhone OS 1 homage: a 4-column icon grid on black and a 4-slot dock.
 export component HomeScreen inherits Rectangle {
-    property <int> words: seg.selected == 0 ? 12 : 24;
+    property <int> words: AppState.word-option == 0 ? 12 : 24;
     property <bool> help: false;
     background: #000000;
 
@@ -23,12 +23,11 @@ export component HomeScreen inherits Rectangle {
     seg := Segmented {
         x: (root.width - 260px) / 2; y: 74px; width: 260px;
         options: ["12 words", "24 words"];
-        selected: 1;
+        selected <=> AppState.word-option;
     }
 
-    GlossyIcon { x: 12px; y: 138px; icon: @image-url("../../resources/icons/spark.svg"); label: "Glider"; tint: #2A86DD; clicked => { AppState.start-arcade(root.words, 3); } }
-    GlossyIcon { x: 126px; y: 138px; icon: @image-url("../../resources/icons/shard.svg"); label: "Shard"; tint: #138C86; clicked => { AppState.start-arcade(root.words, 4); } }
-    GlossyIcon { x: 240px; y: 138px; icon: @image-url("../../resources/icons/info.svg"); label: "How it works"; tint: #6F7D91; clicked => { root.help = true; } }
+    GlossyIcon { x: 12px; y: 138px; icon: @image-url("../../resources/icons/shard.svg"); label: "Shard"; tint: #138C86; clicked => { AppState.start-arcade(root.words, 4); } }
+    GlossyIcon { x: 126px; y: 138px; icon: @image-url("../../resources/icons/info.svg"); label: "How it works"; tint: #6F7D91; clicked => { root.help = true; } }
 
     Text {
         y: 268px; width: root.width; horizontal-alignment: center;
@@ -57,7 +56,7 @@ export component HomeScreen inherits Rectangle {
                 "We mix your chaos with the chip's randomness: SHA-256(chip + you).",
                 "Even if you play badly, it's never weaker than the chip.",
                 "Credits are conservative estimates; stale input is rejected live.",
-                "Outguess, Static Hunt, Glitch Glider and Shard Stack only pay for what the machine can't predict.",
+                "Outguess, Static Hunt and Shard Stack only pay for what the machine can't predict.",
                 "Dice Duel uses only your dice, so you can verify it on a laptop."
             ];
             for line[i] in self.lines: GroupedCell { first: i == 0; last: i == 4; wrap: true; label: line; }

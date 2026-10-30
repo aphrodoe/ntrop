@@ -4,42 +4,98 @@ import { AppState, Ios } from "../state.slint";
 import { NavBar } from "../kit/nav_bar.slint";
 import { GlossyButton } from "../kit/glossy_button.slint";
 
-// Calculator-style glossy grey key.
+// Original pip faces over the calculator-style keys. One press enters one physical roll.
 component DiceKey inherits Rectangle {
     in property <int> face;
-    height: 120px;
+    height: 134px;
     Image {
         width: parent.width; height: parent.height;
         source: ta.pressed ? @image-url("../../resources/icons/key-on.svg", nine-slice(12)) : @image-url("../../resources/icons/key.svg", nine-slice(12));
     }
-    Text { y: (parent.height - self.height) / 2 - 1px; text: root.face; color: #000000A6; font-family: Ios.font; font-size: 44px; font-weight: 700; }
-    Text { text: root.face; color: #FFFFFF; font-family: Ios.font; font-size: 44px; font-weight: 700; }
-    ta := TouchArea { clicked => { AppState.roll(root.face); } }
+    Rectangle {
+        x: (parent.width - 64px) / 2; y: 15px; width: 64px; height: 64px;
+        border-radius: 11px; background: #F5F4F0;
+        border-width: 2px; border-color: #B5BAC4;
+        for i in 9: Rectangle {
+            property <bool> pip: (i == 0 || i == 8) ? root.face >= 2
+                : (i == 2 || i == 6) ? root.face >= 4
+                : (i == 3 || i == 5) ? root.face == 6
+                : i == 4 && mod(root.face, 2) == 1;
+            x: 10px + mod(i, 3) * 18px; y: 10px + floor(i / 3) * 18px;
+            width: 9px; height: 9px; border-radius: 4.5px;
+            background: #232833; visible: self.pip;
+        }
+    }
+    Text {
+        y: 88px; width: parent.width; height: 31px;
+        text: root.face; color: #FFFFFF;
+        font-family: Ios.font; font-size: 24px; font-weight: 700;
+        horizontal-alignment: center;
+    }
+    if ta.pressed: Rectangle { x: 3px; y: 3px; width: parent.width - 6px; height: parent.height - 6px; border-radius: 10px; border-width: 2px; border-color: #A9CCFF; background: transparent; }
+    ta := TouchArea {
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down { AppState.roll(root.face); }
+        }
+    }
 }
 
 export component DiceScreen inherits Rectangle {
-    background: #000000;
-    NavBar { y: 40px; width: root.width; title: "Dice Duel"; back-label: "Home"; back => { AppState.back-home(); } }
+    background: #08090C;
+    property <int> remaining: max(0, AppState.rolls-needed - AppState.roll-count);
+    property <bool> ready: root.remaining == 0;
+
     VerticalLayout {
         y: 104px; height: root.height - 104px;
-        padding: 14px; padding-bottom: 24px;
+        padding: 16px; padding-bottom: 22px;
         spacing: 12px;
-        // display, like the calculator's grey-blue readout
+        Text {
+            height: 24px;
+            text: "Roll a physical die, then tap its face.";
+            color: #E3E7EF; font-family: Ios.font; font-size: 17px;
+            horizontal-alignment: center;
+        }
         Rectangle {
             height: 150px;
-            border-radius: 8px;
-            background: #5B6370;
-            Rectangle {
-                x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px; border-radius: 6px;
-                background: #D9DFE6;
-                Rectangle { y: parent.height / 2; height: parent.height / 2 - 6px; x: 6px; width: parent.width - 12px; border-radius: 6px; background: #C6CED8; }
+            border-radius: 10px; background: #5B6370;
+            Rectangle { x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px; border-radius: 8px; background: #D9DFE6; }
+            Text {
+                x: 16px; y: 12px; width: parent.width - 32px; height: 18px;
+                text: "DICE ONLY  ·  NO CHIP RANDOMNESS";
+                color: #4F5D70; font-family: Ios.font; font-size: 12px; font-weight: 700;
             }
-            VerticalLayout {
-                padding: 12px;
-                spacing: 2px;
-                Text { text: AppState.roll-count + " / " + AppState.rolls-needed; color: #1C2430; font-family: Ios.font; font-size: 40px; font-weight: 700; horizontal-alignment: right; }
-                Text { text: Math.round(AppState.dice-bits) + " bits"; color: #3E4A5C; font-family: Ios.font; font-size: 18px; font-weight: 700; horizontal-alignment: right; }
-                Text { text: AppState.rolls-text; color: #1C2430; font-family: "Source Code Pro"; font-size: 18px; horizontal-alignment: right; }
+            Text {
+                x: 16px; y: 34px; width: parent.width - 174px; height: 54px;
+                text: AppState.roll-count + " / " + AppState.rolls-needed;
+                color: #192332; font-family: Ios.font; font-size: 42px; font-weight: 700;
+            }
+            Text {
+                x: parent.width - 162px; y: 42px; width: 146px; height: 24px;
+                text: Math.round(AppState.dice-bits) + " bits";
+                color: #334B67; font-family: Ios.font; font-size: 20px; font-weight: 700;
+                horizontal-alignment: right;
+            }
+            Text {
+                x: parent.width - 162px; y: 70px; width: 146px; height: 20px;
+                text: AppState.dice-words + " words";
+                color: #4F5D70; font-family: Ios.font; font-size: 15px;
+                horizontal-alignment: right;
+            }
+            Text {
+                x: 16px; y: 104px; width: 110px; height: 22px;
+                text: "LAST TWO"; color: #4F5D70;
+                font-family: Ios.font; font-size: 12px; font-weight: 700;
+            }
+            Text {
+                x: 132px; y: 100px; width: parent.width - 148px; height: 26px;
+                text: AppState.roll-count == 0 ? "No rolls yet" : AppState.rolls-text;
+                color: #192332; font-family: "Source Code Pro"; font-size: 18px;
+                horizontal-alignment: right;
+            }
+            Rectangle {
+                x: 16px; y: parent.height - 14px; width: parent.width - 32px; height: 6px;
+                border-radius: 3px; background: #A7B1BF;
+                Rectangle { x: 0px; y: 0px; width: parent.width * min(AppState.roll-count, AppState.rolls-needed) / max(AppState.rolls-needed, 1); height: parent.height; border-radius: 3px; background: #346DBD; }
             }
         }
         GridLayout {
@@ -48,11 +104,25 @@ export component DiceScreen inherits Rectangle {
             Row { DiceKey { face: 1; } DiceKey { face: 2; } DiceKey { face: 3; } }
             Row { DiceKey { face: 4; } DiceKey { face: 5; } DiceKey { face: 6; } }
         }
+        Text {
+            height: 24px;
+            text: AppState.dice-note == "" ? "Enter exactly what you roll." : AppState.dice-note;
+            color: #CAD6E8; font-family: Ios.font; font-size: 16px;
+            horizontal-alignment: center;
+        }
+        Text {
+            height: 24px;
+            text: root.ready ? "Ready. You can now reveal your words." : root.remaining + " more rolls before you can continue.";
+            color: root.ready ? #A9CCFF : #8E9CAD;
+            font-family: Ios.font; font-size: 15px;
+            horizontal-alignment: center;
+        }
         Rectangle { vertical-stretch: 1; }
         HorizontalLayout {
-            spacing: 10px;
-            GlossyButton { text: "Undo"; enabled: AppState.roll-count > 0; clicked => { AppState.undo-roll(); } }
-            GlossyButton { text: "Done"; primary: true; enabled: AppState.roll-count >= AppState.rolls-needed; clicked => { AppState.dice-done(); } }
+            spacing: 12px;
+            GlossyButton { text: "Undo last"; enabled: AppState.roll-count > 0; clicked => { AppState.undo-roll(); } }
+            GlossyButton { text: root.ready ? "Show words" : "Done"; primary: true; enabled: root.ready; clicked => { AppState.dice-done(); } }
         }
     }
+    NavBar { y: 40px; width: root.width; title: "Dice Duel"; back-label: "Home"; back => { AppState.back-home(); } }
 }

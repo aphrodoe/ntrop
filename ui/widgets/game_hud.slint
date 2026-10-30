@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MIT
+
+import { AppState, Ios, Neon } from "../state.slint";
+import { ProgressMeter } from "../kit/progress_meter.slint";
+
+// Compact game chrome: keep the field below y=196 free of meter and status overlays.
+export component GameHud inherits Rectangle {
+    in property <string> hint;
+    in property <bool> healthy: true;
+    property <bool> full: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;
+    height: 92px;
+    background: #100F1B;
+
+    ProgressMeter {
+        x: 16px;
+        y: 8px;
+        width: parent.width - 32px;
+        height: 54px;
+        target: AppState.target-bits;
+        touch-bits: AppState.touch-bits;
+        camera-bits: AppState.camera-bits;
+        game-bits: AppState.game-bits;
+        touch-ok: AppState.touch-healthy;
+        camera-ok: AppState.camera-healthy;
+        game-ok: AppState.game-healthy;
+        label-color: #C3BFE0;
+        full-color: #C6FF3D;
+    }
+    Text {
+        x: 16px;
+        y: 66px;
+        width: parent.width - 32px;
+        height: 20px;
+        text: root.full ? "Entropy ready. Tap Done to continue." : root.hint;
+        color: root.full ? #C6FF3D : root.healthy ? #C3BFE0 : #FFB020;
+        font-family: Ios.font;
+        font-size: 15px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+    Rectangle { y: parent.height - 1px; height: 1px; background: Neon.line; }
+}

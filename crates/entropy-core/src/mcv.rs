@@ -1,4 +1,4 @@
-//! Most-common-value min-entropy estimator over a sliding symbol window (shared by Glitch Glider, Shard Stack).
+//! Most-common-value min-entropy estimator over a sliding symbol window (used by Shard Stack).
 //! The window is secret entropy material: never logged, zeroized on wipe.
 
 use zeroize::Zeroize;
