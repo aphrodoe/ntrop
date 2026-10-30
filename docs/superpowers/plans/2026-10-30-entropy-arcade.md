@@ -467,11 +467,12 @@ Rules: the view is 240×320, scaled 2× under the meter. A press that moves more
   - `P0` is the median of the last 16 bins.
   - `P1..P16` are lag-k repeats (`b₋ₖ`).
   - `P17` is linear extrapolation, `2b₋₁ − b₋₂`.
+  - `P18..P20` are lag-k extrapolations, `2b₋ₖ − b₋₂ₖ` for k = 2..4 (round-3 addition: they catch swing combined with a tempo curve).
   - All predictions are committed before the tap is pushed.
   - A predictor hits when `|b − pred| ≤ 1`, and each keeps hits over the last 64 taps.
   - `n` is the number of scored taps (≤ 64). The bound is `p_ub = min(1, (max_k hits_k + 4) / n)`, giving `pred_mbits = floor(−log2 p_ub · 1000)`.
   - `Session::glide_tap` credits `min(mcv.credit, pred_mbits)`, capped at 2000.
-  - Health is unhealthy if either estimate says so, or if `p_ub > 0.5`.
+  - Health is unhealthy if either estimate says so, or if `p_ub > 0.75` once 32 taps are scored. The 0.5 threshold flagged 94–100% of honest σ = 5–8 ms taps while they still earned. Deterministic tappers sit at `p_ub = 1`, so they stay flagged.
   - Taps with no symbol keep the previous `game_ok` rather than forcing healthy.
   - `ivals` and the bin window are `Vec::with_capacity(..)`, sized once, so they never reallocate.
 - Produces (core, pool/session):
