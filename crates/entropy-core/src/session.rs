@@ -1,6 +1,6 @@
 //! App session: owns the pool and the generated secrets; never logs them.
 
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
     dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, EntropyPool, QuizQuestion, SampleResult, WordCount,
@@ -19,6 +19,7 @@ pub struct Session {
 }
 
 pub const WORDS_PER_PAGE: usize = 6;
+const MAX_ROLLS: usize = 255;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum QuizOutcome {
@@ -30,7 +31,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), rolls: Zeroizing::new(Vec::new()) }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
     }
 }
 
@@ -97,7 +98,7 @@ impl Session {
 
     /// Accepts only 1..=6; returns false (and stores nothing) otherwise.
     pub fn push_roll(&mut self, r: u8) -> bool {
-        let ok = (1..=6).contains(&r) && self.rolls.len() < 255;
+        let ok = (1..=6).contains(&r) && self.rolls.len() < MAX_ROLLS;
         if ok {
             self.rolls.push(r);
         }
@@ -105,7 +106,11 @@ impl Session {
     }
 
     pub fn pop_roll(&mut self) {
-        self.rolls.pop();
+        // Vec::pop alone leaves the removed byte outside len, where a later wipe can miss it.
+        if let Some(last) = self.rolls.last_mut() {
+            last.zeroize();
+            self.rolls.pop();
+        }
     }
 
     pub fn rolls(&self) -> &[u8] {
@@ -121,7 +126,7 @@ impl Session {
         let entropy = dice_entropy(&self.rolls, self.wc).map_err(|e| format!("{e:?}"))?;
         self.words = words(&entropy);
         self.entropy = Some(entropy);
-        self.rolls = Zeroizing::new(Vec::new());
+        self.rolls.zeroize(); // keep the preallocated storage: no secret-bearing reallocations
         Ok(())
     }
 
@@ -140,7 +145,7 @@ impl Session {
         self.quiz = Vec::new(); // QuizQuestion zeroizes on drop
         self.step = 0;
         self.oracle.wipe();
-        self.rolls = Zeroizing::new(Vec::new());
+        self.rolls.zeroize();
     }
 
     pub fn page(&self) -> usize {
@@ -215,6 +220,10 @@ impl Default for Session {
     fn default() -> Self {
         Self::new()
     }
+}
+
+impl Drop for Session {
+    fn drop(&mut self) { self.wipe(); }
 }
 
 #[cfg(test)]
@@ -298,6 +307,52 @@ mod tests {
         assert_eq!(s.words(), &*words(&dice_entropy(&r, WordCount::Twelve).unwrap()));
         assert!(s.rolls().is_empty());
         s.push_roll(1); s.wipe(); assert!(s.rolls().is_empty() && s.words().is_empty());
+    }
+    #[test]
+    fn dice_roll_storage_never_reallocates() {
+        let mut s = Session::new();
+        s.start_dice(WordCount::TwentyFour);
+        let storage = s.rolls.as_ptr();
+        for i in 0..255 {
+            assert!(s.push_roll((i % 6 + 1) as u8));
+            assert_eq!(s.rolls.as_ptr(), storage, "rolls must stay in their wipeable allocation");
+        }
+        assert!(!s.push_roll(1));
+        assert_eq!(s.rolls().len(), 255);
+        s.wipe();
+        assert!(s.rolls().is_empty());
+        assert_eq!(s.rolls.as_ptr(), storage);
+    }
+
+    #[test]
+    fn undo_zeroizes_removed_roll() {
+        let mut s = Session::new();
+        s.start_dice(WordCount::Twelve);
+        s.push_roll(6);
+        let slot = s.rolls.as_ptr();
+        s.pop_roll();
+        assert!(s.rolls().is_empty());
+        // SAFETY: pop keeps this allocation alive, and this u8 slot was initialized above.
+        assert_eq!(unsafe { slot.read() }, 0);
+    }
+
+    #[test]
+    fn dice_24_word_session_requires_99_rolls_and_matches_full_hash() {
+        use sha2::{Digest, Sha256};
+        let r: Vec<u8> = (0..99).map(|i| (i % 6 + 1) as u8).collect();
+        let mut s = Session::new();
+        s.start_dice(WordCount::TwentyFour);
+        for &roll in &r[..98] { assert!(s.push_roll(roll)); }
+        assert!(s.generate_from_dice().is_err());
+        assert!(s.words().is_empty());
+        assert_eq!(s.rolls().len(), 98);
+        assert!(s.push_roll(r[98]));
+        s.generate_from_dice().unwrap();
+        let hash = Sha256::digest(r.iter().map(|r| b'0' + r).collect::<Vec<_>>());
+        assert_eq!(s.entropy.as_ref().unwrap().as_slice(), &hash[..]);
+        assert_eq!(s.words(), &*words(&hash));
+        assert_eq!(s.words().len(), 24);
+        assert!(s.rolls().is_empty());
     }
     #[test] fn fingerprint_matches_entropy() {
         let s = gen();

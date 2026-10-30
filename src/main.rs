@@ -11,6 +11,7 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use entropy_core::{qr_matrix, QuizOutcome, SampleResult, Session, WordCount};
+use entropy_core::feedback::{Feedback, Pulse};
 use zeroize::Zeroizing;
 use slint_keyos_platform::app_ui2;
 use slint_keyos_platform::slint::{
@@ -53,6 +54,7 @@ fn clear_secrets(st: &AppState) {
     st.set_page(0);
     st.set_first_index(0);
     st.set_last_guess(-1);
+    st.set_last_hit(false);
     st.set_last_credit(SharedString::new());
     st.set_read_pct(0);
     st.set_rolls_text(SharedString::new());
@@ -63,9 +65,15 @@ fn clear_secrets(st: &AppState) {
 
 /// Dice counters plus the masked rolls ("•••• 1 5": only the last two rolls show).
 fn sync_dice(st: &AppState, s: &Session) {
+    use std::fmt::Write;
     let r = s.rolls();
-    let mut t = if r.len() > 2 { "•••• ".to_string() } else { String::new() };
-    t.push_str(&r[r.len().saturating_sub(2)..].iter().map(|d| d.to_string()).collect::<Vec<_>>().join(" "));
+    // Maximum 16 UTF-8 bytes (four bullets, spaces, two digits); no temporary roll strings.
+    let mut t = Zeroizing::new(String::with_capacity(16));
+    if r.len() > 2 { t.push_str("•••• "); }
+    for (i, roll) in r[r.len().saturating_sub(2)..].iter().enumerate() {
+        if i > 0 { t.push(' '); }
+        write!(t, "{roll}").unwrap();
+    }
     st.set_rolls_text(SharedString::from(t.as_str()));
     st.set_roll_count(r.len() as i32);
     st.set_rolls_needed(s.rolls_needed() as i32);
@@ -130,45 +138,6 @@ fn sync_meter(ui: &AppWindow, s: &Session) {
     st.set_target_bits(s.target_bits() as i32);
 }
 
-/// Fires haptics from pool counters (never secrets): tick per 8 credited bits, ramp at 90%, full, alert on unhealthy.
-#[derive(Default)]
-struct Feedback {
-    ticks: u32,
-    ramped: bool,
-    full: bool,
-    touch_ok: bool,
-    game_ok: bool,
-}
-
-impl Feedback {
-    fn new() -> Self {
-        Self { touch_ok: true, game_ok: true, ..Default::default() }
-    }
-
-    fn update(&mut self, credited: u32, target: u32, full: bool, touch_ok: bool, game_ok: bool) {
-        if (self.touch_ok && !touch_ok) || (self.game_ok && !game_ok) {
-            haptics::alert();
-        }
-        self.touch_ok = touch_ok;
-        self.game_ok = game_ok;
-        if full {
-            if !self.full {
-                self.full = true;
-                haptics::full();
-            }
-        } else if credited / 8 > self.ticks {
-            haptics::tick();
-        }
-        self.ticks = credited / 8;
-        if !self.ramped && credited * 10 >= target * 9 {
-            self.ramped = true;
-            if !full {
-                haptics::ramp();
-            }
-        }
-    }
-}
-
 #[derive(Default)]
 struct Gesture {
     start: (f32, f32),
@@ -179,8 +148,13 @@ struct Gesture {
 /// Syncs the meter and fires haptics after a credited sample.
 fn credit(ui: &AppWindow, s: &Session, f: &RefCell<Feedback>) {
     sync_meter(ui, s);
-    if let Some(p) = s.pool() {
-        f.borrow_mut().update(p.credited_bits(), s.target_bits(), p.is_full(), p.touch_healthy() && p.camera_healthy(), p.game_healthy());
+    let events = f.borrow_mut().update(s, ui.global::<AppState>().get_camera_on());
+    if events.alert { haptics::alert(); }
+    match events.pulse {
+        Some(Pulse::Tick) => haptics::tick(),
+        Some(Pulse::Ramp) => haptics::ramp(),
+        Some(Pulse::Full) => haptics::full(),
+        None => {},
     }
 }
 
@@ -276,10 +250,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         st.set_last_hit(m.hit);
         st.set_last_credit(SharedString::from(format!("+{:.1} bits", m.credit_mbits as f32 / 1000.0).as_str()));
         st.set_read_pct(m.read_pct as i32);
-        let sb = s.borrow();
-        if let Some(p) = sb.pool() {
-            f.borrow_mut().update(p.credited_bits(), sb.target_bits(), p.is_full(), p.touch_healthy(), p.game_healthy());
-        }
+        credit(&ui, &s.borrow(), &f);
     });
 
     let (u, s) = (ui.as_weak(), session.clone());
@@ -335,11 +306,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         }
         t.push(TrailDot { x, y, age: 0.0 });
         if r != SampleResult::Uncredited {
-            sync_meter(&ui, &s.borrow());
-            let sb = s.borrow();
-            if let Some(p) = sb.pool() {
-                f.borrow_mut().update(p.credited_bits(), sb.target_bits(), p.is_full(), p.touch_healthy(), p.game_healthy());
-            }
+            credit(&ui, &s.borrow(), &f);
         }
     });
 
@@ -355,6 +322,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         } else {
             st.set_camera_note(SharedString::from("Camera unavailable"));
         }
+        credit(&ui, &s.borrow(), &f);
     });
 
     let g = gesture.clone();
@@ -454,6 +422,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
                 let r = Zeroizing::new(r);
                 s.borrow_mut().start_quiz(&r);
                 st.set_qr(Image::default());
+                st.set_page_words(ModelRc::from(Rc::new(VecModel::<SharedString>::default())));
                 show_quiz(&st, &s.borrow());
                 st.set_screen(Screen::Quiz);
             }
@@ -494,9 +463,10 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     // finish() and back-home() both wipe the session and every secret-bearing UI property.
-    let (u, s, t, ht) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone());
+    let (u, s, t, ht, g) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone(), gesture.clone());
     let leave = Rc::new(move || {
         ht.stop();
+        *g.borrow_mut() = Gesture::default();
         s.borrow_mut().wipe();
         t.set_vec(Vec::new());
         let ui = u.upgrade().unwrap();

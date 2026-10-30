@@ -59,7 +59,7 @@ export component DoneScreen inherits VerticalLayout {
                 wrap: word-wrap;
             }
             Text {
-                text: AppState.dice-words == 24 ? "All 64 hex characters are the entropy." : "The first 32 hex characters are the entropy.";
+                text: (AppState.dice-words == 24 ? "All 64 hex characters are the entropy." : "The first 32 hex characters are the entropy.") + " Convert that entropy to BIP39 with an offline tool.";
                 color: Theme.palette-muted;
                 font-family: Theme.font-primary;
                 font-size: Theme.font-size-label;

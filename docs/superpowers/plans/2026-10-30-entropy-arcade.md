@@ -418,17 +418,19 @@ Rules: the view is 240×320, scaled 2× under the meter. A press that moves more
 
 ### Task 13: Polish and demo
 
+**Scope update (2026-10-31):** Finish the project and the user's additional ideas first. Video recording, narration, and submission preparation are deferred at the user's request.
+
 **Files:** Modify `ui/screens/*`, `ui/widgets/meter.slint`, `resources/icon.svg` and `resources/icon-dark.svg`.
 
 - [ ] **Step 1: Glow and motion.** Glow on trail dots, doors and ghosts (2–3 layered rounded rectangles with decreasing opacity), and animated meter width (`animate width { duration: 120ms; }`).
 - [ ] **Step 2: Home screen.** Add a "How it works" `Sheet` with these 5 short lines:
-  - "We mix your chaos with the chip's randomness: SHA-256(chip ‖ you)."
+  - "We mix your chaos with the chip's randomness: SHA-256(chip + you)."
   - "Even if you play badly, it's never weaker than the chip."
   - "Credits are conservative estimates; stale input is rejected live."
   - "Outguess and Static Hunt only pay for what the machine can't predict."
   - "Dice Duel uses only your dice, so you can verify it on a laptop."
 - [ ] **Step 3: App icon.** A neon die with a spark, on ink, in cyan and lime.
-- [ ] **Step 4: Rehearse the demo** in `foundation sim` using the built-in recorder. Script, about 2 min:
+- [ ] **Step 4: Check the game flows** in `foundation sim`, with screenshots as needed:
   1. The hook: "Can you trust one chip?"
   2. Scribble while the meter climbs and haptic ticks fire. Hold still and get rejected.
   3. Outguess: a lazy pattern gets read ("reads you 70%"), then real play pays.
@@ -436,7 +438,7 @@ Rules: the view is 240×320, scaled 2× under the meter. A press that moves more
   5. Fill the meter, then show the summary, words, SeedQR, quiz, and the fingerprint with its art.
   6. Dice Duel with the laptop check.
 - [ ] **Step 5: Final check.** Run `cargo test -p entropy-core --lib` (all pass), then `grep -rn "log::" src | grep -v -E "info!\(\"(screen|bits|health)"` and review that nothing secret is logged.
-- [ ] **Step 6: Commit** with `"feat: arcade polish"`. The submission email is sent by the user (ledger Ruling D).
+- [ ] **Step 6: Commit** with `"feat: arcade polish"`.
 
 ---
 

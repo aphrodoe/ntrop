@@ -2,6 +2,7 @@
 //! Pure Rust, no KeyOS deps, so it is tested on the host with `cargo test -p entropy-core`.
 
 pub mod dice;
+pub mod feedback;
 pub mod health;
 pub mod outguess;
 pub mod pool;

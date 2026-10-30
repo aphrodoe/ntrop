@@ -150,7 +150,7 @@ impl EntropyPool {
                 return SampleResult::SourceUnhealthy;
             }
         }
-        let drawing = self
+        let drawing = self.touch_ok && self
             .last_touch_us
             .is_some_and(|t| t_us.saturating_sub(t) <= CAMERA_TOUCH_WINDOW_US);
         let room = (self.wc.target_bits() / 2).saturating_sub(self.camera_bits);
@@ -343,6 +343,18 @@ mod tests {
             p.add_camera_frame(&noisy_frame(i), t + 1_000);
         }
         assert!(!p.touch_healthy());
+        assert_eq!(p.camera_bits(), 0);
+    }
+
+    #[test]
+    fn camera_stops_immediately_when_recent_touch_turns_unhealthy() {
+        let mut p = EntropyPool::new(WordCount::TwentyFour);
+        p.add_camera_frame(&noisy_frame(0), 0);
+        p.add_touch(0, 0, 1_000);
+        p.add_touch(5, 7, 2_000);
+        for i in 0..8 { p.add_touch(5, 7, 3_000 + i * 1_000); }
+        assert!(!p.touch_healthy());
+        assert_eq!(p.add_camera_frame(&noisy_frame(1), 20_000), SampleResult::Uncredited);
         assert_eq!(p.camera_bits(), 0);
     }
 

@@ -101,13 +101,12 @@ pub fn start(ui: Weak<AppWindow>, session: Rc<RefCell<Session>>, t0: Instant, fb
             let t_us = t0.elapsed().as_micros() as u64;
             let content = frame.content();
             let bytes: &[u8] = content.as_slice();
-            let r = session.borrow_mut().on_camera_frame(bytes, t_us);
+            session.borrow_mut().on_camera_frame(bytes, t_us);
             if let Some(img) = preview(bytes) {
                 st.set_camera_preview(img);
             }
-            if r != entropy_core::SampleResult::Uncredited {
-                crate::credit(&w, &session.borrow(), &fb);
-            }
+            // Health can recover even when a frame earns no credit (stale touch or camera cap).
+            crate::credit(&w, &session.borrow(), &fb);
         }
     });
     TASK.with(|t| *t.borrow_mut() = Some(task));
