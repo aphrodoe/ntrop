@@ -48,6 +48,13 @@ impl Session {
         }
     }
 
+    pub fn on_camera_frame(&mut self, frame: &[u8], t_us: u64) -> SampleResult {
+        match self.pool.as_mut() {
+            Some(p) => p.add_camera_frame(frame, t_us),
+            None => SampleResult::Uncredited,
+        }
+    }
+
     /// Records a door pick: the oracle's prediction is fixed before the door is pushed.
     pub fn outguess_pick(&mut self, door: u8, x: i32, y: i32, t_us: u64) -> Move {
         let m = self.oracle.record(door);
@@ -213,6 +220,7 @@ impl Default for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test] fn camera_frame_without_pool_is_uncredited() { let mut s = Session::new(); assert_eq!(s.on_camera_frame(&[1, 2, 3], 0), SampleResult::Uncredited); }
     #[test] fn finish_requires_hw_random() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); assert!(s.generate(Err(())).is_err()); assert!(s.words().is_empty()); }
     #[test] fn session_wipe_clears_secrets() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); s.generate(Ok([3;32])).unwrap(); assert_eq!(s.words().len(), 12); s.wipe(); assert!(s.words().is_empty()); }
 

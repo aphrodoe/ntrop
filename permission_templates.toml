@@ -58,3 +58,4 @@
 ]
 [entropy-arcade]
 "os/haptics" = ["Vibrate"]
+"os/camera" = ["Subscribe", "IsEnabled"]

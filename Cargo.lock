@@ -657,6 +657,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "camera"
+version = "1.0.0"
+dependencies = [
+ "log",
+ "num-derive",
+ "num-traits",
+ "rand 0.8.6",
+ "rkyv",
+ "server",
+ "shared_memory",
+ "xous",
+]
+
+[[package]]
 name = "camino"
 version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1311,6 +1325,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 name = "entropy-arcade"
 version = "0.1.0"
 dependencies = [
+ "camera",
  "entropy-core",
  "foundation-themes",
  "getrandom 0.2.10",

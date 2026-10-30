@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Foundation Devices, Inc. <hello@foundation.xyz>
 // SPDX-License-Identifier: MIT
 
+mod camera;
 mod haptics;
 mod hunt;
 mod theme;
@@ -25,6 +26,13 @@ const POP_MS: u32 = 600;
 const MAX_TRAIL: usize = 200;
 /// Trail dot lifetime: age advances 1/60 per 16 ms tick, so a dot lasts ~1 s.
 const AGE_STEP: f32 = 1.0 / 60.0;
+
+/// Camera off everywhere it must not stay on: toggle, Done, Home, new run.
+fn camera_off(st: &AppState) {
+    camera::stop();
+    st.set_camera_on(false);
+    st.set_camera_preview(Image::default());
+}
 
 fn hw_random() -> Result<[u8; 32], ()> {
     let mut b = [0u8; 32];
@@ -172,7 +180,7 @@ struct Gesture {
 fn credit(ui: &AppWindow, s: &Session, f: &RefCell<Feedback>) {
     sync_meter(ui, s);
     if let Some(p) = s.pool() {
-        f.borrow_mut().update(p.credited_bits(), s.target_bits(), p.is_full(), p.touch_healthy(), p.game_healthy());
+        f.borrow_mut().update(p.credited_bits(), s.target_bits(), p.is_full(), p.touch_healthy() && p.camera_healthy(), p.game_healthy());
     }
 }
 
@@ -229,6 +237,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     st.on_start_arcade(move |n, game| {
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
+        camera_off(&ui.global::<AppState>());
         let wc = if n == 24 { WordCount::TwentyFour } else { WordCount::Twelve };
         s.borrow_mut().start_arcade(wc);
         t.set_vec(Vec::new());
@@ -334,12 +343,18 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         }
     });
 
-    let u = ui.as_weak();
+    let (u, s, f) = (ui.as_weak(), session.clone(), fb.clone());
     st.on_toggle_camera(move || {
-        // Camera sampling is wired in Task 7; the flag only drives the UI for now.
         let ui = u.upgrade().unwrap();
         let st = ui.global::<AppState>();
-        st.set_camera_on(!st.get_camera_on());
+        st.set_camera_note(SharedString::new());
+        if st.get_camera_on() {
+            camera_off(&st);
+        } else if camera::start(u.clone(), s.clone(), start, f.clone()) {
+            st.set_camera_on(true);
+        } else {
+            st.set_camera_note(SharedString::from("Camera unavailable"));
+        }
     });
 
     let g = gesture.clone();
@@ -392,6 +407,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         let ui = u.upgrade().unwrap();
         if s.borrow().pool().is_some_and(|p| p.is_full()) {
             ht.stop();
+            camera_off(&ui.global::<AppState>());
             ui.global::<AppState>().set_screen(Screen::Summary);
         }
     });
@@ -485,6 +501,8 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         t.set_vec(Vec::new());
         let ui = u.upgrade().unwrap();
         let st = ui.global::<AppState>();
+        camera_off(&st);
+        st.set_camera_note(SharedString::new());
         clear_secrets(&st);
         st.set_screen(Screen::Home);
     });

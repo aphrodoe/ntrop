@@ -16,6 +16,7 @@ getrandom = "0.2"
 entropy-core = { path = "crates/entropy-core" }
 log-server = { package = "xous-api-log", path = ".foundation-sdk/current/lib/keyos/xous/api/log" }
 haptics = { path = ".foundation-sdk/current/lib/keyos/api/haptics" }
+camera = { path = ".foundation-sdk/current/lib/keyos/api/camera" }
 server = { path = ".foundation-sdk/current/lib/keyos/server" }
 slint-keyos-platform = { path = ".foundation-sdk/current/lib/keyos/slint-keyos-platform/runtime" }
 foundation-themes = { path = ".foundation-sdk/current/lib/keyos/sdk/crates/foundation-themes" }

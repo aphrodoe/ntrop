@@ -44,6 +44,22 @@ export component PainterScreen inherits Rectangle {
         variant: ButtonVariant.ghost;
         clicked => { AppState.back-home(); }
     }
+    if AppState.camera-on: Image {
+        x: parent.width - Theme.spacing-xl - 96px;
+        y: Theme.spacing-xl * 2 + 90px;
+        width: 96px;
+        height: 96px;
+        source: AppState.camera-preview;
+        image-rendering: pixelated;
+    }
+    if AppState.camera-note != "": Text {
+        x: parent.width / 2;
+        y: Theme.spacing-xl * 2 + 90px;
+        text: AppState.camera-note;
+        color: Theme.palette-danger;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+    }
     if !AppState.touch-healthy: Toast {
         y: parent.height - 64px - Theme.spacing-xl * 2 - 120px;
         width: parent.width;
