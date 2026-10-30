@@ -463,6 +463,17 @@ Rules: the view is 240×320, scaled 2× under the meter. A press that moves more
   - It keeps the last 16 intervals.
   - It returns `None` on the first tap, until 16 intervals exist, and after a pause (interval > 1.5 s, which also resets the baseline).
   - Otherwise `r = interval − median(last 16 intervals before this one)` in µs, and the symbol is `clamp(r / 4000, −16, 16) + 16` (0..=32).
+- **Amendment (Task 14 review, 2026-10-31):** `GlideTimer` also keeps the last 64 interval bins `b = interval_us / 4000`, and a `GlidePredictors` set:
+  - `P0` is the median of the last 16 bins.
+  - `P1..P16` are lag-k repeats (`b₋ₖ`).
+  - `P17` is linear extrapolation, `2b₋₁ − b₋₂`.
+  - All predictions are committed before the tap is pushed.
+  - A predictor hits when `|b − pred| ≤ 1`, and each keeps hits over the last 64 taps.
+  - `n` is the number of scored taps (≤ 64). The bound is `p_ub = min(1, (max_k hits_k + 4) / n)`, giving `pred_mbits = floor(−log2 p_ub · 1000)`.
+  - `Session::glide_tap` credits `min(mcv.credit, pred_mbits)`, capped at 2000.
+  - Health is unhealthy if either estimate says so, or if `p_ub > 0.5`.
+  - Taps with no symbol keep the previous `game_ok` rather than forcing healthy.
+  - `ivals` and the bin window are `Vec::with_capacity(..)`, sized once, so they never reallocate.
 - Produces (core, pool/session):
   - `EntropyPool::add_glide(&mut self, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool)` absorbs `TAG_GLIDE = 0x05` with `x ‖ y ‖ t_us`, adds to `game_mbits`, and sets `game_ok`.
   - Refactor `add_outguess` and `add_glide` through one private helper; the absorb format is unchanged.
@@ -492,6 +503,10 @@ Course rules (`src/glide.rs`):
 #[test] fn glide_steady_drift_earns_nothing() { /* intervals 400 ms + 2 ms per tap (deterministic ramp), 120 taps → total 0 */ }
 #[test] fn glide_frame_quantised_jitter_is_bounded() { /* intervals 400 ms + k·16_667 µs, k ∈ {−1,0,1} from a SHA-256 counter, 200 taps → every credit ≤ 1585 mbits (log2 3: three possible values can't carry more) and total > 0 */ }
 #[test] fn glide_human_jitter_earns() { /* intervals 400 ms + (sum of 4 uniform SHA-256 bytes − 510)·80 µs (≈ ±20 ms bell), 200 taps → total ≥ 100_000 mbits */ }
+#[test] fn glide_swing_earns_little() { /* alternating 380/420 ms, 200 taps → total ≤ 5_000 mbits */ }
+#[test] fn glide_periodic_offsets_earn_little() { /* interval offsets cycling [+0,+8,−8,+16] ms and a period-7 cycle, 200 taps each → each total ≤ 5_000 */ }
+#[test] fn glide_smooth_tempo_earns_little() { /* 400 + 20·sin(2πi/40) ms, 200 taps → total ≤ 10_000 */ }
+#[test] fn glide_quantised_bound_holds_across_seeds() { /* the ±1-frame test over 20 different SHA-256 seeds → every credit ≤ 1585 */ }
 #[test] fn glide_pause_resets_baseline() { /* 20 steady taps, a 3 s pause, then the next 16 taps return no symbol (credit 0, healthy) */ }
 ```
 
