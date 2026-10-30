@@ -568,6 +568,9 @@ Course rules (`src/glide.rs`):
         - the same two restricted to the last-used rotation index
         - per piece type, the last (rot, col) used for that type
         - per piece type, the most frequent column used for that type
+      - **Round-3 addition:**
+        - Well-keeping policies: heuristic best and lowest landing, each restricted to placements that leave column 0 empty, and each restricted to placements that leave column 7 empty.
+        - Per piece type, the (rot, col) and column used two pieces ago of that type (lag-2).
       - **An unhealthy piece earns 0.** This applies to Glitch Glider's `glide_tap` too (spec: "Unhealthy data … earns no credit").
       - Drags and rotations are absorbed (`TAG_SHARD`, a move marker plus `t_us`) but never credited.
       - `leave` resets the app's `Shard` state.
@@ -591,6 +594,8 @@ Course rules (`src/glide.rs`):
 #[test] fn shard_column_cycle_earns_nothing() { /* drop in columns cycling 0,2,4,6 (best rotation there, else the nearest legal column), 120 pieces → total ≤ 3_000 */ }
 #[test] fn shard_unhealthy_earns_nothing() { /* "just press Drop" (spawn default every piece), 120 pieces → total ≤ 3_000 */ }
 #[test] fn shard_piece_driven_habits_earn_nothing() { /* "never rotate, best column for rot 0" and "fixed column per piece type (nearest legal)", 120 pieces each over 4 seeds → each total ≤ 3_000 */ }
+#[test] fn shard_well_keeping_earns_nothing() { /* best placement that leaves col 7 empty (else best), and the same for col 0, seeds 10..13 × 120 pieces → each total ≤ 3_000 */ }
+#[test] fn shard_per_type_two_spot_alternation_earns_nothing() { /* each piece type alternates between two fixed columns (nearest legal, best rotation), seeds 10..13 × 120 → each ≤ 3_000 */ }
 #[test] fn shard_piece_sequence_is_not_credited() { /* identical choices (always rank 0) under two different piece sequences → both earn 0 */ }
 #[test] fn wipe_clears_board() { /* place pieces, wipe, cells all zero */ }
 ```
