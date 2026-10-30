@@ -3,7 +3,7 @@
 
 use zeroize::Zeroize;
 
-const KEEP: usize = 8;
+const KEEP: usize = 16;
 const PAUSE_US: u64 = 1_500_000;
 const BIN_US: i64 = 4000;
 
@@ -60,6 +60,6 @@ mod tests {
         let mut s = sess(); let mut t = 0u64;
         for _ in 0..20 { t += 400_000; s.glide_tap(1, 1, t); }
         t += 3_000_000;
-        for _ in 0..9 { let e = s.glide_tap(1, 1, t); assert_eq!((e.credit_mbits, e.healthy), (0, true)); t += 400_000; }
+        for _ in 0..17 { let e = s.glide_tap(1, 1, t); assert_eq!((e.credit_mbits, e.healthy), (0, true)); t += 400_000; }
     }
 }
