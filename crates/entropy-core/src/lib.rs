@@ -6,12 +6,14 @@ pub mod health;
 pub mod pool;
 pub mod quiz;
 pub mod randomart;
+pub mod session;
 pub mod seed;
 
 pub use dice::{dice_entropy, min_rolls, DiceError};
 pub use pool::{EntropyPool, SampleResult};
 pub use quiz::{make_quiz, QuizQuestion};
 pub use randomart::randomart;
+pub use session::Session;
 pub use seed::{master_fingerprint, qr_matrix, seedqr_digits, words};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

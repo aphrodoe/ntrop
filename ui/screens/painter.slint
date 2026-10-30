@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState } from "../state.slint";
+import { Meter } from "../widgets/meter.slint";
+
+export component PainterScreen inherits Rectangle {
+    background: Theme.palette-background;
+
+    TouchArea {
+        moved => { AppState.touch(self.mouse-x, self.mouse-y); }
+    }
+    for d in AppState.trail: Rectangle {
+        x: d.x - 6px;
+        y: d.y - 6px;
+        width: 12px;
+        height: 12px;
+        border-radius: 6px;
+        background: Theme.palette-primary;
+        opacity: 1 - d.age;
+    }
+    Text {
+        y: parent.height / 2;
+        width: parent.width;
+        text: "Scribble anywhere";
+        color: Theme.palette-muted.with-alpha(0.5);
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    VerticalLayout {
+        y: Theme.spacing-xl * 2;
+        height: 90px;
+        x: Theme.spacing-xl;
+        width: parent.width - Theme.spacing-xl * 2;
+        Meter { }
+    }
+    HorizontalLayout {
+        x: Theme.spacing-xl;
+        height: 64px;
+        y: parent.height - self.height - Theme.spacing-xl;
+        width: parent.width - Theme.spacing-xl * 2;
+        spacing: Theme.spacing-md;
+        Button {
+            text: AppState.camera-on ? "Camera: on" : "Camera: off";
+            variant: ButtonVariant.secondary;
+            clicked => { AppState.toggle-camera(); }
+        }
+        Button {
+            text: "Done";
+            disabled: AppState.touch-bits + AppState.camera-bits < AppState.target-bits;
+            clicked => { AppState.painter-done(); }
+        }
+    }
+}

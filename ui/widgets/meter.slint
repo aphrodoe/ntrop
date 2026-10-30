@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme } from "@ui/theme.slint";
+import { ProgressBar, ProgressBarTone } from "@ui/progress_bar.slint";
+import { AppState } from "../state.slint";
+
+export component Meter inherits VerticalLayout {
+    spacing: Theme.spacing-sm;
+    property <int> total: min(AppState.touch-bits + AppState.camera-bits, AppState.target-bits);
+
+    ProgressBar {
+        value: root.total;
+        max-value: AppState.target-bits;
+        show-value-label: false;
+        tone: root.total >= AppState.target-bits ? ProgressBarTone.success : ProgressBarTone.primary;
+    }
+    Text {
+        text: root.total + " / " + AppState.target-bits + " bits";
+        color: Theme.palette-muted;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-label;
+        horizontal-alignment: center;
+    }
+    Text {
+        visible: !AppState.touch-healthy || (AppState.camera-on && !AppState.camera-healthy);
+        height: self.visible ? self.preferred-height : 0px;
+        text: !AppState.touch-healthy ? "Touch looks repetitive: vary your strokes" : "Camera source unhealthy";
+        color: Theme.palette-danger;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-label;
+        horizontal-alignment: center;
+    }
+}

@@ -1,0 +1,26 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { Card } from "@ui/card.slint";
+import { AppState } from "../state.slint";
+
+export component SummaryScreen inherits VerticalLayout {
+    padding: Theme.spacing-xl;
+    padding-top: Theme.spacing-xl * 3;
+    spacing: Theme.spacing-lg;
+
+    Text {
+        text: "Entropy collected";
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-title;
+        font-weight: Theme.font-weight-semibold;
+        horizontal-alignment: center;
+    }
+    Card { title: "Touch"; body: AppState.touch-bits + " bits"; }
+    Card { title: "Camera"; body: AppState.camera-bits + " bits"; }
+    Card { title: "+ hardware 256"; body: "Mixed in from the device TRNG"; }
+    Rectangle { vertical-stretch: 1; }
+    Button { text: "Generate"; size: ControlSize.lg; full-width: true; clicked => { AppState.generate(); } }
+}

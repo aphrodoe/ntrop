@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { ButtonVariant } from "@ui/theme.slint";
+import { AppState } from "../state.slint";
+
+export component HomeScreen inherits VerticalLayout {
+    padding: Theme.spacing-xl;
+    padding-top: Theme.spacing-xl * 3;
+    spacing: Theme.spacing-lg;
+
+    Text {
+        text: "Entropy Arcade";
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-title;
+        font-weight: Theme.font-weight-semibold;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "Can you trust one chip?";
+        color: Theme.palette-muted;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    Rectangle { vertical-stretch: 1; }
+    Button { text: "Arcade · 24 words"; size: ControlSize.lg; full-width: true; clicked => { AppState.start-arcade(24); } }
+    Button { text: "Arcade · 12 words"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.start-arcade(12); } }
+    Button { text: "Dice Duel"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.start-dice(24); } }
+}

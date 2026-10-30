@@ -11,6 +11,8 @@ exclude = [".foundation-sdk"]
 
 [dependencies]
 log = "0.4"
+zeroize = "1"
+getrandom = "0.2"
 entropy-core = { path = "crates/entropy-core" }
 log-server = { package = "xous-api-log", path = ".foundation-sdk/current/lib/keyos/xous/api/log" }
 server = { path = ".foundation-sdk/current/lib/keyos/server" }

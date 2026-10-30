@@ -1,0 +1,25 @@
+// SPDX-License-Identifier: MIT
+
+export enum Screen { home, painter, summary, words, seedqr, quiz, done, dice, error }
+
+export struct TrailDot { x: length, y: length, age: float }
+
+export global AppState {
+    in-out property <Screen> screen: Screen.home;
+    in property <int> touch-bits;
+    in property <int> camera-bits;
+    in property <int> target-bits: 128;
+    in property <bool> touch-healthy: true;
+    in property <bool> camera-healthy: true;
+    in property <bool> camera-on: false;
+    in property <[TrailDot]> trail;
+    in property <string> error-text;
+
+    callback start-arcade(int /* 12 | 24 */);
+    callback start-dice(int);
+    callback touch(length, length);
+    callback toggle-camera();
+    callback painter-done();
+    callback generate();
+    callback back-home();
+}

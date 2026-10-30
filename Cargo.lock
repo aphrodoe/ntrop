@@ -1313,11 +1313,13 @@ version = "0.1.0"
 dependencies = [
  "entropy-core",
  "foundation-themes",
+ "getrandom 0.2.10",
  "log",
  "server",
  "slint-keyos-platform",
  "slint-keyos-platform-build",
  "xous-api-log",
+ "zeroize",
 ]
 
 [[package]]

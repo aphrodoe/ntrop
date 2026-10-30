@@ -69,7 +69,7 @@ impl EntropyPool {
         let Some((px, py)) = self.last_touch.replace((x, y)) else {
             return SampleResult::Uncredited;
         };
-        match self.touch_health.check(x - px, y - py) {
+        match self.touch_health.check(x.wrapping_sub(px), y.wrapping_sub(py)) {
             Verdict::Good => {
                 self.touch_ok = true;
                 self.last_touch_us = Some(t_us); // only healthy touch counts as "drawing" for the camera
@@ -172,6 +172,13 @@ impl Drop for EntropyPool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn extreme_coords_do_not_overflow() {
+        let mut p = EntropyPool::new(WordCount::Twelve);
+        p.add_touch(i32::MIN, i32::MIN, 0);
+        p.add_touch(i32::MAX, i32::MAX, 1);
+    }
 
     /// Feeds `n + 1` touch samples (a pseudo-random walk, so deltas never repeat) from t_us = `t0`.
     fn scribble(p: &mut EntropyPool, n: u32, t0: u64) {
