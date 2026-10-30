@@ -6,6 +6,7 @@ import { Button } from "@ui/button.slint";
 import { AppState, Screen, TrailDot } from "state.slint";
 import { HomeScreen } from "screens/home.slint";
 import { PainterScreen } from "screens/painter.slint";
+import { OutguessScreen } from "screens/outguess.slint";
 import { SummaryScreen } from "screens/summary.slint";
 import { WordsScreen } from "screens/words.slint";
 import { SeedQrScreen } from "screens/seedqr.slint";
@@ -22,6 +23,7 @@ export component AppWindow inherits Window {
 
     if AppState.screen == Screen.home: HomeScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.painter: PainterScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.outguess: OutguessScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.summary: SummaryScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.error: ErrorScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.words: WordsScreen { width: parent.width; height: parent.height; }

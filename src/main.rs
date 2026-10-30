@@ -39,6 +39,9 @@ fn clear_secrets(st: &AppState) {
     st.set_quiz_step(0);
     st.set_page(0);
     st.set_first_index(0);
+    st.set_last_guess(-1);
+    st.set_last_credit(SharedString::new());
+    st.set_read_pct(0);
 }
 
 fn strs(v: &[String]) -> ModelRc<SharedString> {
@@ -88,11 +91,13 @@ fn sync_meter(ui: &AppWindow, s: &Session) {
         // Display-only cap so the shown total never exceeds the target (camera <= half, touch fills the rest).
         let target = s.target_bits();
         let cam = p.camera_bits().min(target / 2);
-        st.set_touch_bits(p.touch_bits().min(target - cam) as i32);
+        let touch = p.touch_bits().min(target - cam);
+        st.set_touch_bits(touch as i32);
         st.set_camera_bits(cam as i32);
         st.set_touch_healthy(p.touch_healthy());
         st.set_camera_healthy(p.camera_healthy());
-        st.set_game_bits(0); // game credit arrives in Task 9
+        st.set_game_bits(p.game_bits().min(target - cam - touch) as i32);
+        st.set_game_healthy(p.game_healthy());
     }
     st.set_target_bits(s.target_bits() as i32);
 }
@@ -104,18 +109,20 @@ struct Feedback {
     ramped: bool,
     full: bool,
     touch_ok: bool,
+    game_ok: bool,
 }
 
 impl Feedback {
     fn new() -> Self {
-        Self { touch_ok: true, ..Default::default() }
+        Self { touch_ok: true, game_ok: true, ..Default::default() }
     }
 
-    fn update(&mut self, credited: u32, target: u32, full: bool, touch_ok: bool) {
-        if self.touch_ok && !touch_ok {
+    fn update(&mut self, credited: u32, target: u32, full: bool, touch_ok: bool, game_ok: bool) {
+        if (self.touch_ok && !touch_ok) || (self.game_ok && !game_ok) {
             haptics::alert();
         }
         self.touch_ok = touch_ok;
+        self.game_ok = game_ok;
         if full {
             if !self.full {
                 self.full = true;
@@ -148,16 +155,39 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     st.set_trail(ModelRc::from(trail.clone()));
 
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
-    st.on_start_arcade(move |n, _game| {
+    st.on_start_arcade(move |n, game| {
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
         let wc = if n == 24 { WordCount::TwentyFour } else { WordCount::Twelve };
         s.borrow_mut().start_arcade(wc);
         t.set_vec(Vec::new());
         sync_meter(&ui, &s.borrow());
-        // Games 1 (outguess) and 2 (hunt) land in Tasks 9/10; until then they use the Painter.
-        ui.global::<AppState>().set_screen(Screen::Painter);
+        let st = ui.global::<AppState>();
+        st.set_last_guess(-1);
+        st.set_last_hit(false);
+        st.set_last_credit(SharedString::new());
+        st.set_read_pct(0);
+        // Game 2 (hunt) lands in Task 10; until then it uses the Painter.
+        st.set_screen(if game == 1 { Screen::Outguess } else { Screen::Painter });
         log::info!("arcade started: {} words", n);
+    });
+
+    let (u, s, f) = (ui.as_weak(), session.clone(), fb.clone());
+    st.on_pick_door(move |door, x, y| {
+        let ui = u.upgrade().unwrap();
+        let t_us = start.elapsed().as_micros() as u64;
+        let m = s.borrow_mut().outguess_pick(door as u8, x as i32, y as i32, t_us);
+        sync_meter(&ui, &s.borrow());
+        // Only now, after the pick is committed, does the guess reach the UI.
+        let st = ui.global::<AppState>();
+        st.set_last_guess(m.predicted as i32);
+        st.set_last_hit(m.hit);
+        st.set_last_credit(SharedString::from(format!("+{:.1} bits", m.credit_mbits as f32 / 1000.0).as_str()));
+        st.set_read_pct(m.read_pct as i32);
+        let sb = s.borrow();
+        if let Some(p) = sb.pool() {
+            f.borrow_mut().update(p.credited_bits(), sb.target_bits(), p.is_full(), p.touch_healthy(), p.game_healthy());
+        }
     });
 
     let u = ui.as_weak();
@@ -179,7 +209,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
             sync_meter(&ui, &s.borrow());
             let sb = s.borrow();
             if let Some(p) = sb.pool() {
-                f.borrow_mut().update(p.credited_bits(), sb.target_bits(), p.is_full(), p.touch_healthy());
+                f.borrow_mut().update(p.credited_bits(), sb.target_bits(), p.is_full(), p.touch_healthy(), p.game_healthy());
             }
         }
     });

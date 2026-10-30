@@ -3,7 +3,7 @@
 use zeroize::Zeroizing;
 
 use crate::{
-    master_fingerprint, make_quiz, randomart, seedqr_digits, words, EntropyPool, QuizQuestion, SampleResult, WordCount,
+    master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, EntropyPool, QuizQuestion, SampleResult, WordCount,
 };
 
 pub struct Session {
@@ -14,6 +14,7 @@ pub struct Session {
     page: usize,
     quiz: Vec<QuizQuestion>,
     step: usize,
+    oracle: Oracle,
 }
 
 pub const WORDS_PER_PAGE: usize = 6;
@@ -28,7 +29,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0 }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default() }
     }
 }
 
@@ -44,6 +45,15 @@ impl Session {
             Some(p) => p.add_touch(x, y, t_us),
             None => SampleResult::Uncredited,
         }
+    }
+
+    /// Records a door pick: the oracle's prediction is fixed before the door is pushed.
+    pub fn outguess_pick(&mut self, door: u8, x: i32, y: i32, t_us: u64) -> Move {
+        let m = self.oracle.record(door);
+        if let Some(p) = self.pool.as_mut() {
+            p.add_outguess(door, x, y, t_us, m.credit_mbits, m.healthy);
+        }
+        m
     }
 
     pub fn pool(&self) -> Option<&EntropyPool> {
@@ -79,6 +89,7 @@ impl Session {
         self.page = 0;
         self.quiz = Vec::new(); // QuizQuestion zeroizes on drop
         self.step = 0;
+        self.oracle.wipe();
     }
 
     pub fn page(&self) -> usize {
@@ -158,6 +169,7 @@ impl Default for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sha2::Digest;
     #[test] fn finish_requires_hw_random() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); assert!(s.generate(Err(())).is_err()); assert!(s.words().is_empty()); }
     #[test] fn session_wipe_clears_secrets() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); s.generate(Ok([3;32])).unwrap(); assert_eq!(s.words().len(), 12); s.wipe(); assert!(s.words().is_empty()); }
 

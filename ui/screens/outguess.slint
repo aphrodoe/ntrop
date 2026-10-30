@@ -1,0 +1,69 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState, Neon } from "../state.slint";
+import { Meter } from "../widgets/meter.slint";
+
+component Door inherits Rectangle {
+    in property <int> index;
+    background: Neon.game;
+    border-radius: Theme.spacing-md;
+    opacity: ta.pressed ? 0.6 : 1;
+    Text {
+        text: root.index + 1;
+        color: white;
+        font-family: Theme.font-primary;
+        font-size: 48px;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    ta := TouchArea {
+        clicked => { AppState.pick-door(root.index, self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y); }
+    }
+}
+
+export component OutguessScreen inherits Rectangle {
+    background: Theme.palette-background;
+    property <bool> picked: AppState.last-guess >= 0;
+
+    VerticalLayout {
+        padding: Theme.spacing-xl;
+        padding-top: Theme.spacing-xl * 2;
+        spacing: Theme.spacing-md;
+        Meter { vertical-stretch: 0; }
+        Button {
+            vertical-stretch: 0;
+            text: "Home";
+            variant: ButtonVariant.ghost;
+            clicked => { AppState.back-home(); }
+        }
+        Text {
+            text: !root.picked ? "Pick a door. The machine is trying to read you." : AppState.game-healthy ? "Machine guessed " + (AppState.last-guess + 1) + (AppState.last-hit ? " · HIT" : " · MISS") + " · " + AppState.last-credit : "READ YOU · +0";
+            color: root.picked && !AppState.game-healthy ? Theme.palette-danger : Theme.palette-foreground;
+            font-family: Theme.font-primary;
+            font-size: Theme.font-size-body;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        Text {
+            text: "The machine reads you " + AppState.read-pct + "%";
+            color: AppState.read-pct > 50 ? Theme.palette-danger : Theme.palette-muted;
+            font-family: Theme.font-primary;
+            font-size: Theme.font-size-label;
+            horizontal-alignment: center;
+        }
+        GridLayout {
+            vertical-stretch: 1;
+            spacing: Theme.spacing-md;
+            Row { Door { index: 0; } Door { index: 1; } }
+            Row { Door { index: 2; } Door { index: 3; } }
+        }
+        Button {
+            vertical-stretch: 0;
+            text: "Done";
+            disabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits < AppState.target-bits;
+            clicked => { AppState.painter-done(); }
+        }
+    }
+}

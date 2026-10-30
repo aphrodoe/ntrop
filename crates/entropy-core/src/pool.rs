@@ -15,6 +15,7 @@ pub enum SampleResult {
 
 const TAG_TOUCH: u8 = 0x01;
 const TAG_CAMERA: u8 = 0x02;
+const TAG_OUTGUESS: u8 = 0x03;
 const DOMAIN: &[u8] = b"entropy-arcade/v1";
 const TOUCH_BITS_PER_SAMPLE: u32 = 1;
 const CAMERA_BITS_PER_FRAME: u32 = 4;
@@ -33,6 +34,9 @@ pub struct EntropyPool {
     camera_bits: u32,
     touch_ok: bool,
     camera_ok: bool,
+    /// Outguess credit in millibits (fractional bits accumulate).
+    game_mbits: u32,
+    game_ok: bool,
 }
 
 impl EntropyPool {
@@ -48,6 +52,8 @@ impl EntropyPool {
             camera_bits: 0,
             touch_ok: true,
             camera_ok: true,
+            game_mbits: 0,
+            game_ok: true,
         }
     }
 
@@ -82,6 +88,19 @@ impl EntropyPool {
                 SampleResult::SourceUnhealthy
             }
         }
+    }
+
+    /// Absorbs a door pick (`door ‖ x ‖ y ‖ t_us`) and adds the oracle's credit for it.
+    pub fn add_outguess(&mut self, door: u8, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {
+        let mut raw = [0u8; 17];
+        raw[0] = door;
+        raw[1..5].copy_from_slice(&x.to_le_bytes());
+        raw[5..9].copy_from_slice(&y.to_le_bytes());
+        raw[9..].copy_from_slice(&t_us.to_le_bytes());
+        self.absorb(TAG_OUTGUESS, &raw);
+        raw.zeroize();
+        self.game_mbits = self.game_mbits.saturating_add(credit_mbits);
+        self.game_ok = healthy;
     }
 
     pub fn add_camera_frame(&mut self, frame: &[u8], t_us: u64) -> SampleResult {
@@ -124,6 +143,8 @@ impl EntropyPool {
         self.camera_bits = 0;
         self.touch_ok = true;
         self.camera_ok = true;
+        self.game_mbits = 0;
+        self.game_ok = true;
     }
 
     pub fn touch_bits(&self) -> u32 {
@@ -134,8 +155,16 @@ impl EntropyPool {
         self.camera_bits
     }
 
+    pub fn game_bits(&self) -> u32 {
+        self.game_mbits / 1000
+    }
+
+    pub fn game_healthy(&self) -> bool {
+        self.game_ok
+    }
+
     pub fn credited_bits(&self) -> u32 {
-        (self.touch_bits + self.camera_bits).min(self.wc.target_bits())
+        (self.touch_bits + self.camera_bits + self.game_bits()).min(self.wc.target_bits())
     }
 
     pub fn is_full(&self) -> bool {
@@ -291,5 +320,22 @@ mod tests {
         scribble(&mut p, 1, 10_000_000);
         assert!(p.is_full());
         assert_eq!(p.credited_bits(), 128);
+    }
+
+    #[test]
+    fn game_credit_fills_meter() {
+        let mut p = EntropyPool::new(WordCount::Twelve);
+        for i in 0..64 { p.add_outguess(1, 0, 0, i, 2000, true); }
+        assert!(p.is_full());
+    }
+
+    #[test]
+    fn wipe_resets_game_credit() {
+        let mut p = EntropyPool::new(WordCount::Twelve);
+        p.add_outguess(1, 0, 0, 0, 5000, true);
+        p.add_outguess(1, 0, 0, 1, 0, false);
+        assert!(!p.game_healthy());
+        p.wipe();
+        assert_eq!((p.game_bits(), p.game_healthy(), p.credited_bits()), (0, true, 0));
     }
 }
