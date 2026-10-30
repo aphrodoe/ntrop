@@ -73,6 +73,21 @@ replace the Prime's own master seed.
     rendering is too slow, the fallback is a flat shooting gallery with the same controls
     and the same credit.
 
+12. **Glitch Glider (added 2026-10-31).** An original one-tap flyer: a spark glides
+    through a static tunnel and each tap pulses it upward. The randomness is **not** the
+    time between taps (the course sets the rhythm) but the player's **timing error**:
+    each interval minus the median of the previous 8. The course has **constant**
+    obstacle spacing, gap height and speed, so the ideal rhythm never changes and the
+    error is purely human. Varying the course from a PRNG would leak game randomness into
+    the error, the same flaw found in Static Hunt's ghost churn. Visual variety comes from
+    the static and colours only.
+13. **Shard Stack (added 2026-10-31).** An original falling-block game on an 8×16 board,
+    with six "shard" shapes (two 3-cell, four 5-cell). The falling piece comes from a game
+    PRNG and earns **no** credit: it is the machine's choice, not the player's. The
+    randomness is the player's **placement choice**. Every legal (rotation, column)
+    placement is scored by a fixed heuristic, and the choice is recorded as its **rank**
+    (0 = the heuristic's best). A player who always plays the "best" move earns nothing.
+
 Game rules shared by every Arcade game: one run fills one meter (no switching games mid-run),
 crashing or losing never loses bits, and game-only randomness (ghost spawns, static
 texture) comes from a separate non-secret PRNG that never touches the pool.
@@ -85,6 +100,8 @@ texture) comes from a separate non-secret PRNG that never touches the pool.
 | Camera frame | 4 bits per frame that passes the health check, **credited only while the user is drawing** (a touch sample in the last 250 ms), and **capped at 50% of the target** | Every frame is hashed in regardless. "Combo" mechanic: LavaRand boosts drawing but can never fill the meter on its own (no waiting-to-fill). |
 | Outguess move | `−log2(p_ub)` bits, at most 2, where `p_ub = (hits + 4) / n` over the last `n ≤ 32` moves and `hits` is the **best** hit count among three predictors (door history; offset from the machine's last revealed guess; win/lose state), judged in hindsight. 0 during the first 16 moves, and 0 (source unhealthy) while `p_ub > 0.5` | The door, tap position and time are all hashed in. The +4 pseudo-hits are the safety margin. The guess is revealed after each tap, so strategies keyed on it ("one below its last guess", win-stay/lose-shift) must be read too; that is what predictors 2 and 3 are for. This estimate is only against *our* predictors, which is why it stays conservative and the chip is always mixed in. A random player earns roughly 1 bit per move. |
 | Static Hunt shot | 1 bit per shot whose miss offset (Δx, Δy) **and** tap-position delta from the previous shot both pass the touch repetition and proportion tests | Look-around drags earn the normal touch credit. A bull's-eye (0, 0) or a repeated offset earns nothing. The tap-position gate exists because ghost motion alone (game PRNG) varies the offset when a player taps one fixed spot. |
+| Glitch Glider tap | NIST SP 800-90B **Most Common Value** estimate over the last `n ≤ 64` binned timing errors (4 ms bins): `p_u = min(1, p̂ + 2.576·√(p̂(1−p̂)/(n−1)))`, credit `−log2(p_u)` per tap, at most 2 bits. 0 for the first 32 taps. The same bin 5 times in a row means unhealthy and 0. | Tap time and position are hashed in. If touch events are quantised to the frame rate, errors collapse into few bins and the estimate drops by itself, so it is honest on any hardware. Expect about 0.5–1.5 bits per tap. |
+| Shard Stack placement | MCV estimate over the last `n ≤ 64` placement ranks (rank capped at 15), credit `−log2(p_u)` per piece, at most 3 bits. 0 for the first 16 pieces, with the same 5-in-a-row unhealthy rule. | Piece id, rotation, column and time are hashed in. Drags and rotations are hashed in but earn no credit, since they mostly *are* the choice. The piece sequence is never credited. Expect about 1.5–2.5 bits per piece for varied play. |
 | Dice roll | log2(6) ≈ 2.585 bits | Exact value, dice mode only. |
 | Hardware RNG | Not counted on the meter | Always mixed in, shown as a fixed "+ hardware 256" badge. |
 
@@ -110,6 +127,9 @@ the target.
   unpredictable again.
 - **Static Hunt shots:** miss offsets go through their own instance of the touch
   repetition and proportion tests.
+- **Glitch Glider and Shard Stack:** the MCV estimate is the health test. Any symbol that
+  dominates the window drives credit to 0, and 5 identical symbols in a row flag the
+  source unhealthy.
 - Thresholds are constants in one place, so they can be tuned in the simulator.
 
 Unhealthy data is still hashed into the pool (it can't hurt). It just earns no credit.
@@ -202,6 +222,8 @@ Use the SDK UI kit components, with these colours set through the app theme.
 8. Dice Duel and its verify panel.
 9. LavaRand (cut first if time runs short).
 10. Polish: animations, the "How it works" screen, icon, demo.
+11. Glitch Glider.
+12. Shard Stack (cut first if time runs short).
 
 ## Decided by the user
 
@@ -211,6 +233,7 @@ Use the SDK UI kit components, with these colours set through the app theme.
 - Add Outguess the Machine and Static Hunt (a Doom-style first-person game, original),
   with a renderer spike first; cut LavaRand before either (2026-10-30).
 - A better design with a decided palette (2026-10-30). The "Neon on ink" values are Claude's proposal.
+- Add a Flappy-style and a Tetris-style game, crediting tap timing and the player's choice against the random piece (2026-10-31). The originals, Glitch Glider and Shard Stack, and their MCV metrics are Claude's design, approved by the user.
 
 ## Calls made by Claude (open to change)
 
@@ -226,6 +249,9 @@ Use the SDK UI kit components, with these colours set through the app theme.
 - Static Hunt credits 1 bit per healthy shot and has no cap, because it needs active play. Its look drags reuse the touch rule.
 - A flyer game was dropped: taps in one spot and one rhythm earn nearly nothing under the health tests.
 - The SDK exposes no accelerometer or microphone, so there are no tilt, shake or sound games.
+- The MCV estimator (NIST SP 800-90B §6.3.1) with a 99% upper bound, 64-symbol window, 4 ms timing bins, the median-of-8 rhythm baseline, and the 5-repeat health rule.
+- Glitch Glider's course is constant (no random geometry), so its timing error cannot carry game randomness.
+- Shard Stack's heuristic weights: aggregate height −0.51, lines +0.76, holes −0.36, bumpiness −0.18.
 
 ## Left to the builder
 

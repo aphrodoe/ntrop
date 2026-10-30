@@ -438,11 +438,132 @@ Rules: the view is 240×320, scaled 2× under the meter. A press that moves more
   5. Fill the meter, then show the summary, words, SeedQR, quiz, and the fingerprint with its art.
   6. Dice Duel with the laptop check.
 - [ ] **Step 5: Final check.** Run `cargo test -p entropy-core --lib` (all pass), then `grep -rn "log::" src | grep -v -E "info!\(\"(screen|bits|health)"` and review that nothing secret is logged.
-- [ ] **Step 6: Commit** with `"feat: arcade polish"`.
+- [ ] **Step 6: Commit** with `"feat: arcade polish"`. The submission email is sent by the user (ledger Ruling D).
+
+
+### Task 14: Glitch Glider (and the shared MCV estimator)
+
+**Files:**
+- Create: `crates/entropy-core/src/mcv.rs`, `crates/entropy-core/src/glide.rs`, `src/glide.rs` (flight physics and course; nothing secret), `ui/screens/glide.slint`
+- Modify: `crates/entropy-core/src/{lib.rs,pool.rs,session.rs}`, `ui/state.slint`, `ui/app.slint`, `ui/screens/home.slint`, `src/main.rs`
+
+**Interfaces:**
+- Produces (core, `mcv.rs`). Task 15 reuses these:
+  - `pub struct Estimate { pub credit_mbits: u32, pub healthy: bool }`
+  - `pub struct Mcv` (`Zeroize`; it holds a symbol window, which is entropy material), built with `Mcv::new(warmup: usize, cap_mbits: u32)`.
+  - `Mcv::push(&mut self, symbol: u16) -> Estimate`
+  - `Mcv::wipe(&mut self)`
+  - Constants `MCV_WINDOW = 64`, `MCV_Z = 2.576`, `MCV_REPEAT = 5`.
+  - Rule: append the symbol and keep the last `n ≤ 64`. The move counter includes this symbol.
+    - If moves ≤ warmup: 0, healthy.
+    - Else if the last 5 symbols are identical: 0, unhealthy.
+    - Else `p̂ = max_count / n`, `p_u = min(1, p̂ + 2.576·√(p̂(1−p̂)/(n−1)))`, and credit `= min(cap, floor(−log2(p_u)·1000))`, healthy.
+- Produces (core, `glide.rs`):
+  - `pub struct GlideTimer` (`Zeroize`) with `tap(&mut self, t_us: u64) -> Option<u16>`.
+  - It keeps the last 8 intervals.
+  - It returns `None` on the first tap, until 8 intervals exist, and after a pause (interval > 1.5 s, which also resets the baseline).
+  - Otherwise `r = interval − median(last 8 intervals before this one)` in µs, and the symbol is `clamp(r / 4000, −16, 16) + 16` (0..=32).
+- Produces (core, pool/session):
+  - `EntropyPool::add_glide(&mut self, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool)` absorbs `TAG_GLIDE = 0x05` with `x ‖ y ‖ t_us`, adds to `game_mbits`, and sets `game_ok`.
+  - Refactor `add_outguess` and `add_glide` through one private helper; the absorb format is unchanged.
+  - `Session::glide_tap(&mut self, x: i32, y: i32, t_us: u64) -> Estimate` uses `Mcv::new(32, 2000)`. Every tap is absorbed, including ones with no symbol (credit 0, healthy).
+  - `wipe` resets the timer and the Mcv.
+- Produces (AppState): `Screen.glide`, `callback glide-tap(length, length)`, `in property <length> glider-y`, `in property <[{x: length, gap-y: length}]> pillars`, `in property <string> glide-note` (e.g. "+1.2 bits" / "Too steady: vary your timing").
+
+Course rules (`src/glide.rs`):
+- Constant scroll speed and pillar spacing, with every gap at the same height. **No randomness in the geometry** (spec Goal 12).
+- Gravity, plus a fixed upward pulse per tap.
+- Hitting a pillar resets the spark to the middle. No game over, and no bits lost.
+- A 16 ms `slint::Timer`, stopped on leave, Done and new run (same lifecycle as Static Hunt).
+
+- [ ] **Step 1: Failing tests.** `mcv.rs`:
+
+```rust
+#[test] fn mcv_constant_symbol_earns_nothing() { let mut m = Mcv::new(16, 2000); let es: Vec<Estimate> = (0..100).map(|_| m.push(7)).collect(); assert_eq!(es.iter().map(|e| e.credit_mbits).sum::<u32>(), 0); assert!(!es.last().unwrap().healthy); }
+#[test] fn mcv_warmup_earns_nothing() { let mut m = Mcv::new(16, 2000); for s in 0..16u16 { assert_eq!(m.push(s).credit_mbits, 0); } }
+#[test] fn mcv_matches_formula() { let mut m = Mcv::new(0, 3000); let mut last = None; for i in 0..64u16 { last = Some(m.push(if i % 4 == 0 { 0 } else { 1 + i % 13 })); } assert_eq!(last.unwrap().credit_mbits, 1356); } // max count 16 of 64 → p_u ≈ 0.3905
+#[test] fn mcv_uniform_symbols_earn() { let mut m = Mcv::new(16, 2000); let total: u32 = (0..200u32).map(|i| m.push((Sha256::digest(i.to_le_bytes())[0] % 16) as u16).credit_mbits).sum(); assert!(total >= 150_000); }
+```
+
+  In `mcv_matches_formula`, make sure no symbol other than 0 reaches 16 occurrences and no 5-in-a-row happens. Adjust the filler sequence if needed, but keep the asserted 1356. `glide.rs`:
+
+```rust
+#[test] fn glide_metronome_earns_nothing() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); let total: u32 = (0..120u64).map(|i| s.glide_tap(100, 400, i * 400_000).credit_mbits).sum(); assert_eq!(total, 0); }
+#[test] fn glide_steady_drift_earns_nothing() { /* intervals 400 ms + 2 ms per tap (deterministic ramp), 120 taps → total 0 */ }
+#[test] fn glide_frame_quantised_jitter_is_bounded() { /* intervals 400 ms + k·16_667 µs, k ∈ {−1,0,1} from a SHA-256 counter, 200 taps → every credit ≤ 1100 mbits and total > 0 */ }
+#[test] fn glide_human_jitter_earns() { /* intervals 400 ms + (sum of 4 uniform SHA-256 bytes − 510)·80 µs (≈ ±20 ms bell), 200 taps → total ≥ 0.8 bits × 168 credited taps */ }
+#[test] fn glide_pause_resets_baseline() { /* 20 steady taps, a 3 s pause, then the next 8 taps return no symbol (credit 0, healthy) */ }
+```
+
+  Plus `wipe_resets_glide` in `session.rs`.
+- [ ] **Step 2: Run** `cargo test -p entropy-core --lib mcv glide`. Expected: FAIL (types missing). Implement, then run the full `cargo test -p entropy-core --lib` (warning-free). Expected: PASS.
+- [ ] **Step 3: UI and Home.**
+  - Home: switch the cards to a 2-column grid of compact tiles: title plus a one-line hook in the source colour. There are six modes now (Painter, Outguess, Hunt, Glider, Shard (routes to Painter until Task 15), Dice), and Home plus the How-it-works button must still fit 800 px.
+  - Glider card hook: "Tap to fly. Your timing wobble is the noise."
+  - `start-arcade(words, 3)` routes to `Screen.glide`.
+  - Glide screen:
+    - The meter is on top. A full-screen `TouchArea` calls `glide-tap(mouse-x, mouse-y)`, and Rust stamps `t_us` with the shared `Instant` at the callback.
+    - The spark is drawn in `Neon.game` with a glow, and the pillars as static-textured rectangles.
+    - `glide-note` shows the last credit, or "Too steady: vary your timing" while unhealthy.
+    - Done once full, and Home → `back-home()`.
+  - Haptics go through the existing `credit()`/`Feedback` path. Never log tap times or intervals.
+- [ ] **Step 4: Verify in the simulator.**
+  - Script about 60 taps at a fixed 400 ms with `passport-sim` tap: credit stays 0 and the note says too steady.
+  - Then tap by hand-varied timing: the meter climbs.
+  - Report the observed credit per tap and whether the sim's touch timestamps look frame-quantised (bins hit).
+  - Screenshot.
+- [ ] **Step 5: Commit:** `"feat: Glitch Glider with MCV timing credit"`
+
+### Task 15: Shard Stack (cut first if time runs short)
+
+**Files:**
+- Create: `crates/entropy-core/src/shard.rs`, `ui/screens/shard.slint`
+- Modify: `crates/entropy-core/src/{lib.rs,pool.rs,session.rs}`, `ui/state.slint`, `ui/app.slint`, `ui/screens/home.slint`, `src/main.rs`
+
+**Interfaces:**
+- Consumes: `Mcv`, `Estimate` (Task 14).
+- Produces (core, `shard.rs`, all `Zeroize`, since the board encodes the player's choices):
+  - `pub struct Board` (8 wide × 16 tall, a `[u8; 16]` row bitmask).
+  - `pub const SHAPES: [&[(u8, u8)]; 6]`: two 3-cell shapes (straight, corner) and four 5-cell shapes (P, U, T, S-like). Rotations are generated by 90° turns with duplicates removed.
+  - `Board::placements(&self, piece: u8) -> Vec<(u8, u8)>` lists legal (rotation, column) hard-drop placements, in a fixed order.
+  - `Board::place(&mut self, piece: u8, rot: u8, col: u8) -> Option<u8>` returns the lines cleared, or `None` if the placement is illegal.
+  - `Board::score_after(&self, piece, rot, col) -> f32` uses aggregate height −0.51, lines +0.76, holes −0.36, bumpiness −0.18.
+  - `Board::rank(&self, piece, rot, col) -> u8` is the number of legal placements with a strictly higher score, capped at 15.
+  - `Board::cells(&self) -> [u8; 128]`.
+  - When a spawned piece has no legal placement, the board clears ("overflow"): no game over, and no bits lost.
+- Produces (core, pool/session):
+  - `EntropyPool::add_shard(&mut self, piece: u8, rot: u8, col: u8, t_us: u64, credit_mbits: u32, healthy: bool)` absorbs `TAG_SHARD = 0x06`, through the shared helper.
+  - `Session::shard_spawn(&mut self, piece: u8)`. The piece comes from the app's game PRNG and is **never credited**.
+  - `Session::shard_place(&mut self, rot: u8, col: u8, t_us: u64) -> Option<Estimate>` ranks the placement *before* placing it, pushes the rank into `Mcv::new(16, 3000)`, absorbs it, then places the piece.
+  - `Session::shard_cells(&self) -> [u8; 128]`. `wipe` zeroizes the board and the Mcv.
+- Produces (AppState): `Screen.shard`, `in property <[int]> shard-cells` (128 cells), `in property <[int]> ghost-cells` (the falling piece's preview), and `callback shard-move(int)` (column delta), `shard-rotate()`, `shard-drop()`.
+
+- [ ] **Step 1: Failing tests** in `shard.rs`:
+
+```rust
+#[test] fn shard_line_clears() { /* fill a row except one gap, place a piece that fills it → place() returns Some(1) and the row is gone */ }
+#[test] fn shard_rank_of_best_is_zero() { let b = Board::default(); let (r, c) = best placement by score_after; assert_eq!(b.rank(0, r, c), 0); }
+#[test] fn shard_illegal_placement_rejected() { /* column past the right edge → place() returns None */ }
+#[test] fn shard_best_play_earns_nothing() { /* Session: 120 pieces from a SHA-256 counter, always placing the rank-0 placement → total credit 0 */ }
+#[test] fn shard_varied_play_earns() { /* same pieces, choose the placement whose rank = (SHA-256 counter byte % 8) when available → total ≥ 100_000 mbits */ }
+#[test] fn shard_piece_sequence_is_not_credited() { /* identical choices (always rank 0) under two different piece sequences → both earn 0 */ }
+#[test] fn wipe_clears_board() { /* place pieces, wipe, cells all zero */ }
+```
+
+- [ ] **Step 2: Run** `cargo test -p entropy-core --lib shard`. Expected: FAIL. Implement, then run the full suite (warning-free). Expected: PASS.
+- [ ] **Step 3: UI.**
+  - The 8×16 grid is drawn as `for` rectangles, with filled cells in `Neon.game`, the falling piece outlined, and the meter on top.
+  - Controls: horizontal drag moves one column per 52 px, a tap rotates, and a Drop button (or a downward swipe) places the piece. The piece sits at the top until dropped (no gravity timer), so the choice is deliberate.
+  - The next piece comes from a xorshift32 seeded once from `hw_random()`, never from the pool.
+  - A note shows "+N bits" or "Too predictable: try other spots" while unhealthy.
+  - Card hook: "Stack shards. Surprise the solver."
+  - Done once full, and Home → `back-home()`. Never log pieces, placements or ranks.
+- [ ] **Step 4: Verify in the simulator.** Play about 25 pieces always into the left-most legal slot, then vary: report credits and screenshots.
+- [ ] **Step 5: Commit:** `"feat: Shard Stack with placement-rank credit"`
 
 ---
 
 ## Time budget
 
 - **Event (70 min):** Tasks 1–3, plus starting Task 5. Tasks 1 and 5 alone give a demoable core.
-- **Overnight:** Tasks 5–13, in that order. If time runs short, cut from the bottom: LavaRand (12) first, then fall back to flat Static Hunt, then polish.
+- **Overnight:** Tasks 5–15, in that order. If time runs short, cut from the bottom: LavaRand (12) first, then fall back to flat Static Hunt, then polish.
