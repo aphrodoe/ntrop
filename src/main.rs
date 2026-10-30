@@ -7,9 +7,12 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use entropy_core::{SampleResult, Session, WordCount};
+use entropy_core::{qr_matrix, QuizOutcome, SampleResult, Session, WordCount};
+use zeroize::Zeroizing;
 use slint_keyos_platform::app_ui2;
-use slint_keyos_platform::slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use slint_keyos_platform::slint::{
+    ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel,
+};
 
 app_ui2!("Entropy Arcade");
 
@@ -21,6 +24,60 @@ fn hw_random() -> Result<[u8; 32], ()> {
     let mut b = [0u8; 32];
     getrandom::getrandom(&mut b).map_err(|_| ())?;
     Ok(b)
+}
+
+/// Clears every secret-bearing UI property. Slint's own image copy is freed, not zeroized (accepted).
+fn clear_secrets(st: &AppState) {
+    let empty: Vec<SharedString> = Vec::new();
+    st.set_page_words(ModelRc::from(Rc::new(VecModel::from(empty.clone()))));
+    st.set_quiz_choices(ModelRc::from(Rc::new(VecModel::from(empty))));
+    st.set_qr(Image::default());
+    st.set_fingerprint(SharedString::new());
+    st.set_art(SharedString::new());
+    st.set_quiz_position(0);
+    st.set_quiz_step(0);
+    st.set_page(0);
+    st.set_first_index(0);
+}
+
+fn strs(v: &[String]) -> ModelRc<SharedString> {
+    ModelRc::from(Rc::new(VecModel::from(v.iter().map(|w| SharedString::from(w.as_str())).collect::<Vec<_>>())))
+}
+
+fn show_words(st: &AppState, s: &Session) {
+    st.set_page_words(strs(s.page_words()));
+    st.set_page(s.page() as i32);
+    st.set_page_count(s.page_count() as i32);
+    st.set_first_index((s.page() * entropy_core::WORDS_PER_PAGE + 1) as i32);
+    st.set_screen(Screen::Words);
+}
+
+fn show_quiz(st: &AppState, s: &Session) {
+    if let Some(q) = s.quiz_question() {
+        st.set_quiz_position(q.position as i32);
+        st.set_quiz_step(s.quiz_step() as i32);
+        st.set_quiz_choices(strs(&q.choices));
+    }
+}
+
+/// Renders the SeedQR (4-module quiet zone, integer scale to ~400 px). The Rust-side bytes are zeroized.
+fn render_qr(digits: &str) -> Image {
+    let (n, dark) = qr_matrix(digits);
+    let total = n + 8;
+    let scale = (400 / total).max(1);
+    let px = total * scale;
+    let mut rgba = Zeroizing::new(vec![255u8; px * px * 4]);
+    for y in 0..px {
+        for x in 0..px {
+            let (mx, my) = (x / scale, y / scale);
+            if (4..4 + n).contains(&mx) && (4..4 + n).contains(&my) && dark[(my - 4) * n + (mx - 4)] {
+                let i = (y * px + x) * 4;
+                rgba[i..i + 3].fill(0);
+            }
+        }
+    }
+    let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(&rgba, px as u32, px as u32);
+    Image::from_rgba8(buf)
 }
 
 /// Pushes pool counters (never secrets) into the UI.
@@ -101,8 +158,9 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     st.on_generate(move || {
         let ui = u.upgrade().unwrap();
         let st = ui.global::<AppState>();
-        match s.borrow_mut().generate(hw_random()) {
-            Ok(()) => st.set_screen(Screen::Words),
+        let r = s.borrow_mut().generate(hw_random());
+        match r {
+            Ok(()) => show_words(&st, &s.borrow()),
             Err(e) => {
                 st.set_error_text(SharedString::from(e.as_str()));
                 st.set_screen(Screen::Error);
@@ -110,12 +168,83 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         }
     });
 
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_next_page(move || {
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        if s.borrow_mut().next_page() {
+            show_words(&st, &s.borrow());
+        } else if let Some(d) = s.borrow().qr_digits() {
+            st.set_qr(render_qr(&d));
+            st.set_screen(Screen::Seedqr);
+        }
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_prev_page(move || {
+        let ui = u.upgrade().unwrap();
+        s.borrow_mut().prev_page();
+        show_words(&ui.global::<AppState>(), &s.borrow());
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_start_quiz(move || {
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        match hw_random() {
+            Ok(r) => {
+                let r = Zeroizing::new(r);
+                s.borrow_mut().start_quiz(&r);
+                st.set_qr(Image::default());
+                show_quiz(&st, &s.borrow());
+                st.set_screen(Screen::Quiz);
+            }
+            Err(()) => {
+                s.borrow_mut().wipe();
+                clear_secrets(&st);
+                st.set_error_text(SharedString::from("Hardware random unavailable"));
+                st.set_screen(Screen::Error);
+            }
+        }
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_answer(move |i| {
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        let outcome = s.borrow_mut().answer(i as usize);
+        match outcome {
+            QuizOutcome::Next => show_quiz(&st, &s.borrow()),
+            QuizOutcome::Restart => {
+                st.set_quiz_choices(ModelRc::from(Rc::new(VecModel::<SharedString>::default())));
+                show_words(&st, &s.borrow());
+            }
+            QuizOutcome::Done => {
+                if let Some((fp, art)) = s.borrow().fingerprint() {
+                    let hex: String = fp.iter().map(|b| format!("{b:02x}")).collect();
+                    st.set_fingerprint(SharedString::from(hex.as_str()));
+                    st.set_art(SharedString::from(art.as_str()));
+                }
+                st.set_quiz_choices(ModelRc::from(Rc::new(VecModel::<SharedString>::default())));
+                st.set_page_words(ModelRc::from(Rc::new(VecModel::<SharedString>::default())));
+                st.set_screen(Screen::Done);
+            }
+        }
+    });
+
+    // finish() and back-home() both wipe the session and every secret-bearing UI property.
     let (u, s, t) = (ui.as_weak(), session.clone(), trail.clone());
-    st.on_back_home(move || {
+    let leave = Rc::new(move || {
         s.borrow_mut().wipe();
         t.set_vec(Vec::new());
-        u.upgrade().unwrap().global::<AppState>().set_screen(Screen::Home);
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        clear_secrets(&st);
+        st.set_screen(Screen::Home);
     });
+    let l = leave.clone();
+    st.on_back_home(move || l());
+    st.on_finish(move || leave());
 
     // Fade the trail; dots past age 1 are dropped.
     let timer = slint::Timer::default();

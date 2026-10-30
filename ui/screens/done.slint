@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState } from "../state.slint";
+
+export component DoneScreen inherits VerticalLayout {
+    padding: Theme.spacing-xl;
+    padding-top: Theme.spacing-xl * 2;
+    spacing: Theme.spacing-md;
+
+    Text {
+        text: "Backed up";
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-title;
+        font-weight: Theme.font-weight-semibold;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "Fingerprint " + AppState.fingerprint;
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: AppState.art;
+        color: Theme.palette-foreground;
+        font-family: "Source Code Pro";
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "App buffers wiped";
+        color: Theme.palette-muted;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    Rectangle { vertical-stretch: 1; }
+    Button { text: "Finish"; size: ControlSize.lg; full-width: true; clicked => { AppState.finish(); } }
+}

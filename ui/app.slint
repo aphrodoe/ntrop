@@ -7,6 +7,10 @@ import { AppState, Screen, TrailDot } from "state.slint";
 import { HomeScreen } from "screens/home.slint";
 import { PainterScreen } from "screens/painter.slint";
 import { SummaryScreen } from "screens/summary.slint";
+import { WordsScreen } from "screens/words.slint";
+import { SeedQrScreen } from "screens/seedqr.slint";
+import { QuizScreen } from "screens/quiz.slint";
+import { DoneScreen } from "screens/done.slint";
 import { ErrorScreen } from "screens/error.slint";
 
 export { AppState, Screen, TrailDot, Theme, Images, ControlSize }
@@ -20,13 +24,17 @@ export component AppWindow inherits Window {
     if AppState.screen == Screen.painter: PainterScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.summary: SummaryScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.error: ErrorScreen { width: parent.width; height: parent.height; }
-    // Words / SeedQR / Quiz / Done / Dice arrive in Tasks 6-9.
-    if AppState.screen == Screen.words || AppState.screen == Screen.dice: VerticalLayout {
+    if AppState.screen == Screen.words: WordsScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.seedqr: SeedQrScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.quiz: QuizScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.done: DoneScreen { width: parent.width; height: parent.height; }
+    // Dice Duel arrives in Task 9.
+    if AppState.screen == Screen.dice: VerticalLayout {
         width: parent.width;
         height: parent.height;
         padding: Theme.spacing-xl;
         Text {
-            text: AppState.screen == Screen.words ? "Words (Task 6)" : "Dice Duel (Task 9)";
+            text: "Dice Duel (Task 9)";
             color: Theme.palette-foreground;
             font-family: Theme.font-primary;
             horizontal-alignment: center;

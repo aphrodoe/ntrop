@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState } from "../state.slint";
+
+export component SeedQrScreen inherits VerticalLayout {
+    padding: Theme.spacing-xl;
+    padding-top: Theme.spacing-xl * 2;
+    spacing: Theme.spacing-md;
+
+    Text {
+        text: "SeedQR";
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-title;
+        font-weight: Theme.font-weight-semibold;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "Scan with an offline wallet. Never photograph it.";
+        wrap: word-wrap;
+        color: Theme.palette-danger;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    Image { source: AppState.qr; image-fit: contain; image-rendering: pixelated; horizontal-stretch: 0; height: 400px; }
+    Rectangle { vertical-stretch: 1; }
+    Button { text: "Quiz me"; size: ControlSize.lg; full-width: true; clicked => { AppState.start-quiz(); } }
+}

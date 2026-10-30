@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState } from "../state.slint";
+
+export component WordsScreen inherits VerticalLayout {
+    padding: Theme.spacing-xl;
+    padding-top: Theme.spacing-xl * 2;
+    spacing: Theme.spacing-md;
+
+    Text {
+        text: "Your seed words";
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-title;
+        font-weight: Theme.font-weight-semibold;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: "Write these down. Never photograph them.";
+        wrap: word-wrap;
+        color: Theme.palette-danger;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        horizontal-alignment: center;
+    }
+    for w[i] in AppState.page-words: Text {
+        text: (AppState.first-index + i) + ". " + w;
+        color: Theme.palette-foreground;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-title;
+    }
+    Rectangle { vertical-stretch: 1; }
+    Text {
+        text: (AppState.page + 1) + " / " + AppState.page-count;
+        color: Theme.palette-muted;
+        font-family: Theme.font-primary;
+        horizontal-alignment: center;
+    }
+    if AppState.page > 0: Button { text: "Back"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.prev-page(); } }
+    Button { text: AppState.page + 1 < AppState.page-count ? "Next" : "Show SeedQR"; size: ControlSize.lg; full-width: true; clicked => { AppState.next-page(); } }
+}

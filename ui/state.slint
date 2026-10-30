@@ -22,4 +22,24 @@ export global AppState {
     callback painter-done();
     callback generate();
     callback back-home();
+
+    // Words (6 per page)
+    in property <[string]> page-words;
+    in property <int> page;
+    in property <int> page-count;
+    in property <int> first-index;
+    callback next-page();
+    callback prev-page();
+    // SeedQR
+    in property <image> qr;
+    callback start-quiz();
+    // Quiz
+    in property <int> quiz-step;
+    in property <int> quiz-position;
+    in property <[string]> quiz-choices;
+    callback answer(int);
+    // Done
+    in property <string> fingerprint;
+    in property <string> art;
+    callback finish();
 }
