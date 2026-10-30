@@ -490,8 +490,8 @@ Course rules (`src/glide.rs`):
 ```rust
 #[test] fn glide_metronome_earns_nothing() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); let total: u32 = (0..120u64).map(|i| s.glide_tap(100, 400, i * 400_000).credit_mbits).sum(); assert_eq!(total, 0); }
 #[test] fn glide_steady_drift_earns_nothing() { /* intervals 400 ms + 2 ms per tap (deterministic ramp), 120 taps → total 0 */ }
-#[test] fn glide_frame_quantised_jitter_is_bounded() { /* intervals 400 ms + k·16_667 µs, k ∈ {−1,0,1} from a SHA-256 counter, 200 taps → every credit ≤ 1100 mbits and total > 0 */ }
-#[test] fn glide_human_jitter_earns() { /* intervals 400 ms + (sum of 4 uniform SHA-256 bytes − 510)·80 µs (≈ ±20 ms bell), 200 taps → total ≥ 0.8 bits × 168 credited taps */ }
+#[test] fn glide_frame_quantised_jitter_is_bounded() { /* intervals 400 ms + k·16_667 µs, k ∈ {−1,0,1} from a SHA-256 counter, 200 taps → every credit ≤ 1585 mbits (log2 3: three possible values can't carry more) and total > 0 */ }
+#[test] fn glide_human_jitter_earns() { /* intervals 400 ms + (sum of 4 uniform SHA-256 bytes − 510)·80 µs (≈ ±20 ms bell), 200 taps → total ≥ 100_000 mbits */ }
 #[test] fn glide_pause_resets_baseline() { /* 20 steady taps, a 3 s pause, then the next 8 taps return no symbol (credit 0, healthy) */ }
 ```
 
