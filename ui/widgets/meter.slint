@@ -1,32 +1,41 @@
 // SPDX-License-Identifier: MIT
 
 import { Theme } from "@ui/theme.slint";
-import { AppState } from "../state.slint";
+import { AppState, Neon } from "../state.slint";
 
 export component Meter inherits VerticalLayout {
     spacing: Theme.spacing-sm;
-    property <int> total: min(AppState.touch-bits + AppState.camera-bits, AppState.target-bits);
+    property <int> tgt: max(AppState.target-bits, 1);
+    property <int> t: min(AppState.touch-bits, AppState.target-bits);
+    property <int> c: min(AppState.camera-bits, AppState.target-bits - root.t);
+    property <int> g: min(AppState.game-bits, AppState.target-bits - root.t - root.c);
+    property <int> total: root.t + root.c + root.g;
 
-    // Segmented bar: touch (red while unhealthy) then camera.
+    // Segmented bar: touch (cyan), camera (magenta), game (violet); a segment turns error-red while unhealthy.
     Rectangle {
         height: 12px;
         border-radius: 6px;
-        background: Theme.palette-border;
+        background: Neon.line;
         clip: true;
         Rectangle {
             x: 0px;
-            width: parent.width * min(AppState.touch-bits, AppState.target-bits) / max(AppState.target-bits, 1);
-            background: AppState.touch-healthy ? (root.total >= AppState.target-bits ? #4ade80 : Theme.palette-primary) : Theme.palette-danger;
+            width: parent.width * root.t / root.tgt;
+            background: AppState.touch-healthy ? Neon.touch : Theme.palette-danger;
         }
         Rectangle {
-            x: parent.width * min(AppState.touch-bits, AppState.target-bits) / max(AppState.target-bits, 1);
-            width: parent.width * min(AppState.camera-bits, AppState.target-bits - min(AppState.touch-bits, AppState.target-bits)) / max(AppState.target-bits, 1);
-            background: AppState.camera-healthy ? Theme.palette-secondary : Theme.palette-danger;
+            x: parent.width * root.t / root.tgt;
+            width: parent.width * root.c / root.tgt;
+            background: AppState.camera-healthy ? Neon.camera : Theme.palette-danger;
+        }
+        Rectangle {
+            x: parent.width * (root.t + root.c) / root.tgt;
+            width: parent.width * root.g / root.tgt;
+            background: AppState.game-healthy ? Neon.game : Theme.palette-danger;
         }
     }
     Text {
         text: root.total + " / " + AppState.target-bits + " bits (conservative estimate)";
-        color: Theme.palette-muted;
+        color: root.total >= AppState.target-bits ? Theme.palette-primary : Theme.palette-muted;
         font-family: Theme.font-primary;
         font-size: Theme.font-size-label;
         horizontal-alignment: center;

@@ -92,6 +92,7 @@ fn sync_meter(ui: &AppWindow, s: &Session) {
         st.set_camera_bits(cam as i32);
         st.set_touch_healthy(p.touch_healthy());
         st.set_camera_healthy(p.camera_healthy());
+        st.set_game_bits(0); // game credit arrives in Task 9
     }
     st.set_target_bits(s.target_bits() as i32);
 }
@@ -147,13 +148,14 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     st.set_trail(ModelRc::from(trail.clone()));
 
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
-    st.on_start_arcade(move |n| {
+    st.on_start_arcade(move |n, _game| {
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
         let wc = if n == 24 { WordCount::TwentyFour } else { WordCount::Twelve };
         s.borrow_mut().start_arcade(wc);
         t.set_vec(Vec::new());
         sync_meter(&ui, &s.borrow());
+        // Games 1 (outguess) and 2 (hunt) land in Tasks 9/10; until then they use the Painter.
         ui.global::<AppState>().set_screen(Screen::Painter);
         log::info!("arcade started: {} words", n);
     });

@@ -64,7 +64,7 @@ export component PainterScreen inherits Rectangle {
         }
         Button {
             text: "Done";
-            disabled: AppState.touch-bits + AppState.camera-bits < AppState.target-bits;
+            disabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits < AppState.target-bits;
             clicked => { AppState.painter-done(); }
         }
     }

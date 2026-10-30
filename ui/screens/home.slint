@@ -1,18 +1,71 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
-import { ButtonVariant } from "@ui/theme.slint";
-import { AppState } from "../state.slint";
+import { Theme } from "@ui/theme.slint";
+import { AppState, Neon } from "../state.slint";
+
+component GameCard inherits Rectangle {
+    in property <string> title;
+    in property <string> hook;
+    in property <color> accent;
+    callback clicked();
+    height: 92px;
+    border-radius: Theme.radius-md;
+    background: Theme.palette-surface;
+    border-width: 2px;
+    border-color: ta.pressed ? root.accent : Neon.line;
+    HorizontalLayout {
+        padding: Theme.spacing-lg;
+        spacing: Theme.spacing-md;
+        Rectangle { width: 6px; background: root.accent; border-radius: 3px; }
+        VerticalLayout {
+            alignment: center;
+            spacing: Theme.spacing-xs;
+            Text {
+                text: root.title;
+                color: Theme.palette-foreground;
+                font-family: Theme.font-primary;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-semibold;
+            }
+            Text {
+                text: root.hook;
+                color: root.accent;
+                font-family: Theme.font-primary;
+                font-size: Theme.font-size-label;
+                overflow: elide;
+            }
+        }
+    }
+    ta := TouchArea { clicked => { root.clicked(); } }
+}
+
+component WordToggle inherits Rectangle {
+    in property <int> value;
+    in property <int> option;
+    callback picked();
+    horizontal-stretch: 1;
+    height: 48px;
+    border-radius: 24px;
+    background: root.value == root.option ? Theme.palette-primary : Neon.raised;
+    Text {
+        text: root.option + " words";
+        color: root.value == root.option ? Theme.palette-background : Theme.palette-muted;
+        font-family: Theme.font-primary;
+        font-size: Theme.font-size-body;
+        font-weight: Theme.font-weight-semibold;
+    }
+    TouchArea { clicked => { root.picked(); } }
+}
 
 export component HomeScreen inherits VerticalLayout {
+    property <int> words: 24;
     padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 3;
-    spacing: Theme.spacing-lg;
+    padding-top: Theme.spacing-xl * 2;
+    spacing: Theme.spacing-md;
 
     Text {
         text: "Entropy Arcade";
-        color: Theme.palette-foreground;
+        color: Theme.palette-primary;
         font-family: Theme.font-primary;
         font-size: Theme.font-size-title;
         font-weight: Theme.font-weight-semibold;
@@ -25,8 +78,14 @@ export component HomeScreen inherits VerticalLayout {
         font-size: Theme.font-size-body;
         horizontal-alignment: center;
     }
+    HorizontalLayout {
+        spacing: Theme.spacing-sm;
+        WordToggle { value: root.words; option: 12; picked => { root.words = 12; } }
+        WordToggle { value: root.words; option: 24; picked => { root.words = 24; } }
+    }
+    GameCard { title: "Chaos Painter"; hook: "Scribble. Your hand is the dice."; accent: Neon.touch; clicked => { AppState.start-arcade(root.words, 0); } }
+    GameCard { title: "Outguess the Machine"; hook: "Be less predictable than a bot."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 1); } }
+    GameCard { title: "Static Hunt"; hook: "Hunt noise in the camera feed."; accent: Neon.camera; clicked => { AppState.start-arcade(root.words, 2); } }
+    GameCard { title: "Dice Duel"; hook: "Roll against the chip."; accent: Neon.warning; clicked => { AppState.start-dice(root.words); } }
     Rectangle { vertical-stretch: 1; }
-    Button { text: "Arcade · 24 words"; size: ControlSize.lg; full-width: true; clicked => { AppState.start-arcade(24); } }
-    Button { text: "Arcade · 12 words"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.start-arcade(12); } }
-    Button { text: "Dice Duel"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.start-dice(24); } }
 }

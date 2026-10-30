@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-export enum Screen { home, painter, summary, words, seedqr, quiz, done, dice, error }
+export enum Screen { home, painter, outguess, hunt, summary, words, seedqr, quiz, done, dice, error }
+
+// Colours with no theme token: source identities plus the ink-palette extras.
+export global Neon {
+    out property <color> touch: #00E5FF;
+    out property <color> camera: #FF2BD6;
+    out property <color> game: #8B5CFF;
+    out property <color> raised: #1E1B2C;
+    out property <color> line: #2C2840;
+    out property <color> warning: #FFB020;
+}
 
 export struct TrailDot { x: length, y: length, age: float }
 
@@ -9,13 +19,15 @@ export global AppState {
     in property <int> touch-bits;
     in property <int> camera-bits;
     in property <int> target-bits: 128;
+    in property <int> game-bits;
+    in property <bool> game-healthy: true;
     in property <bool> touch-healthy: true;
     in property <bool> camera-healthy: true;
     in property <bool> camera-on: false;
     in property <[TrailDot]> trail;
     in property <string> error-text;
 
-    callback start-arcade(int /* 12 | 24 */);
+    callback start-arcade(int /* 12 | 24 */, int /* game: 0 painter, 1 outguess, 2 hunt */);
     callback start-dice(int);
     callback touch(length, length);
     callback toggle-camera();

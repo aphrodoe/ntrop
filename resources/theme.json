@@ -1,5 +1,31 @@
 {
   "id": "app_theme",
   "name": "Entropy Arcade",
-  "parent": "base_theme"
+  "parent": "base_theme",
+  "tokens": {
+    "colors": {
+      "light": {
+        "primary": "#C6FF3D",
+        "primary-pressed": "#9CCC2E",
+        "secondary": "#1E1B2C",
+        "danger": "#FF4D6D",
+        "surface": "#15131F",
+        "background": "#0B0A12",
+        "text": "#F2F0FF",
+        "text-muted": "#9A94B8",
+        "transparent": "#00000000"
+      },
+      "dark": {
+        "primary": "#C6FF3D",
+        "primary-pressed": "#9CCC2E",
+        "secondary": "#1E1B2C",
+        "danger": "#FF4D6D",
+        "surface": "#15131F",
+        "background": "#0B0A12",
+        "text": "#F2F0FF",
+        "text-muted": "#9A94B8",
+        "transparent": "#00000000"
+      }
+    }
+  }
 }

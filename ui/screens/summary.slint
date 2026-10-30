@@ -20,6 +20,7 @@ export component SummaryScreen inherits VerticalLayout {
     }
     Card { title: "Touch"; body: AppState.touch-bits + " bits (conservative estimate)"; }
     Card { title: "Camera"; body: AppState.camera-bits + " bits (conservative estimate)"; }
+    Card { title: "Game skill"; body: AppState.game-bits + " bits (conservative estimate)"; }
     Card { title: "+ hardware 256"; body: "Mixed in from the device TRNG"; }
     Rectangle { vertical-stretch: 1; }
     Button { text: "Home"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
