@@ -169,7 +169,6 @@ impl Default for Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sha2::Digest;
     #[test] fn finish_requires_hw_random() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); assert!(s.generate(Err(())).is_err()); assert!(s.words().is_empty()); }
     #[test] fn session_wipe_clears_secrets() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); s.generate(Ok([3;32])).unwrap(); assert_eq!(s.words().len(), 12); s.wipe(); assert!(s.words().is_empty()); }
 
@@ -198,6 +197,12 @@ mod tests {
         assert!(s.qr_digits().is_some() && s.fingerprint().is_some());
         s.wipe();
         assert!(s.quiz_question().is_none() && s.qr_digits().is_none() && s.fingerprint().is_none());
+    }
+    #[test] fn outguess_pick_feeds_pool() {
+        use sha2::Digest;
+        let mut s = Session::new(); s.start_arcade(WordCount::Twelve);
+        for i in 0..64u32 { s.outguess_pick(sha2::Sha256::digest(i.to_le_bytes())[0] & 3, 1, 2, i as u64); }
+        assert!(s.pool().unwrap().game_bits() > 0);
     }
     #[test] fn fingerprint_matches_entropy() {
         let s = gen();
