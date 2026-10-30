@@ -16,7 +16,7 @@
 - No secret (entropy, pool digest, words, seed, fingerprint inputs) may reach `log::*`, files, settings or panics. Log only counts and states.
 - Mixing must be exactly `SHA-256("entropy-arcade/v1" ‖ hw_random[32] ‖ pool_digest[32])`, truncated to 32 bytes (24 words) or 16 bytes (12 words).
 - Dice mode must be exactly `SHA-256(ASCII digits of rolls)`, truncated the same way. Minimum 50 rolls for 12 words and 99 for 24. **No hardware RNG in dice mode.**
-- Credits: 1 bit per healthy touch sample. 4 bits per healthy camera frame, only if a touch sample arrived ≤250 ms earlier, with camera total capped at `target_bits / 2`. Outguess: `−log2(p_ub)` per move (≤ 2 bits), `p_ub = (hits + 4) / n` over the last `n ≤ 32` moves, 0 for the first 16 moves and while `p_ub > 0.5`. Static Hunt: 1 bit per shot whose miss offset passes the touch health tests. Targets are 256 bits (24 words) or 128 bits (12 words).
+- Credits: 1 bit per healthy touch sample. 4 bits per healthy camera frame, only if a touch sample arrived ≤250 ms earlier, with camera total capped at `target_bits / 2`. Outguess: `−log2(p_ub)` per move (≤ 2 bits), `p_ub = (hits + 4) / n` over the last `n ≤ 32` moves, 0 for the first 16 moves and while `p_ub > 0.5`. Static Hunt: 1 bit per shot whose miss offset passes the touch health tests. Glitch Glider: min(MCV over the median-of-16 timing residual, the 21-predictor bound) per tap, at most 2 bits. Shard Stack: min(rank MCV, the 53-policy bound) per piece, at most 3 bits. Unhealthy earns 0. Targets are 256 bits (24 words) or 128 bits (12 words).
 - Palette "Neon on ink": ink `#0B0A12`, surface `#15131F`, raised `#1E1B2C`, line `#2C2840`, text `#F2F0FF`, muted `#9A94B8`, touch `#00E5FF`, camera `#FF2BD6`, game `#8B5CFF`, primary/success `#C6FF3D`, warning `#FFB020`, error `#FF4D6D`.
 - Game-only randomness (ghost spawns, static texture) never comes from the pool.
 - UI copy: the wipe message reads **"App buffers wiped"**, never "all memory". Credits are labelled as **conservative estimates**.
@@ -518,7 +518,7 @@ Course rules (`src/glide.rs`):
   - Glider card hook: "Tap to fly. Your timing wobble is the noise."
   - `start-arcade(words, 3)` routes to `Screen.glide`.
   - Glide screen:
-    - The meter is on top. A full-screen `TouchArea` calls `glide-tap(mouse-x, mouse-y)`, and Rust stamps `t_us` with the shared `Instant` at the callback.
+    - The meter is on top. A `TouchArea` over the 480×480 play area (Home and Done must stay tappable) calls `glide-tap(mouse-x, mouse-y)`, and Rust stamps `t_us` with the shared `Instant` at the callback.
     - The spark is drawn in `Neon.game` with a glow, and the pillars as static-textured rectangles.
     - `glide-note` shows the last credit, or "Too steady: vary your timing" while unhealthy.
     - Done once full, and Home → `back-home()`.
