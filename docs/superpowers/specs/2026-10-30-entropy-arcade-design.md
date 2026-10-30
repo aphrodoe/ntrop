@@ -73,7 +73,7 @@ replace the Prime's own master seed.
     rendering is too slow, the fallback is a flat shooting gallery with the same controls
     and the same credit.
 
-12. **Glitch Glider (added 2026-10-31).** An original one-tap flyer: a spark glides
+12. **Glitch Glider (added 2026-10-31; REMOVED 2026-10-31 at the user's request: "not satisfied with it". Kept below as a record of the design and its review findings).** An original one-tap flyer: a spark glides
     through a static tunnel and each tap pulses it upward. The randomness is **not** the
     time between taps (the course sets the rhythm) but the player's **timing error**:
     each interval minus the median of the previous 16 (a long baseline, so the symbol reflects the new tap and does not re-count earlier taps' randomness). The course has **constant**
@@ -139,6 +139,17 @@ Unhealthy data is still hashed into the pool (it can't hurt). It just earns no c
 1. **Home ("cabinet").** Title, the "Can you trust one chip?" tagline, a 12/24-word
    toggle, and one card per game: *Chaos Painter*, *Outguess the Machine*, *Static Hunt*,
    *Dice Duel*. Plus a short "How it works".
+1d. **Outguess Duel (added 2026-10-31).** Two players on one device, face to face, split
+   screen: the top half is rotated 180°. Each round both commit secretly within a 3 s lock-in, the
+   **hider** taps a door and the **seeker** guesses; then both are revealed. The seeker scores on a
+   match, the hider on a miss; roles swap every 5 rounds, and the first to 10 wins. Credit counts
+   both players' doors and taps. **Per player, `hits` is the max of (a) the machine's three
+   experts' hindsight hits on that player's door sequence and (b) the opponent's actual correct
+   reads of that player**, then the usual `p_ub = (hits + 4) / n` bound applies (≤ 2 bits/move,
+   16-move warm-up per player, unhealthy earns 0). Player 2 only contributes entropy; the seed and
+   words belong to the device owner and are shown only after the duel. The Outguess card gets a
+   1/2-player switch; single player is unchanged. Cross-device play by camera QR exchange is a
+   future idea, since the sim camera never delivered frames.
 1b. **Outguess.** The meter at top, a 2×2 grid of large doors, the last result
    ("Machine guessed 3 · MISS · +1.4 bits"), and "The machine reads you N%".
 1c. **Static Hunt.** A first-person view (or the flat fallback) under the meter, with a
@@ -246,6 +257,8 @@ Use the SDK UI kit components, with these colours set through the app theme.
 - Add Outguess the Machine and Static Hunt (a Doom-style first-person game, original),
   with a renderer spike first; cut LavaRand before either (2026-10-30).
 - A better design with a decided palette (2026-10-30). The "Neon on ink" values are Claude's proposal.
+- Remove Glitch Glider (2026-10-31): the user was not satisfied with it. The shared MCV estimator stays (Shard Stack uses it).
+- Add Outguess Duel, a 2-player same-device mode of Outguess, with a 1/2-player switch (2026-10-31).
 - Add a Flappy-style and a Tetris-style game, crediting tap timing and the player's choice against the random piece (2026-10-31). The originals, Glitch Glider and Shard Stack, and their MCV metrics are Claude's design, approved by the user.
 
 ## Calls made by Claude (open to change)

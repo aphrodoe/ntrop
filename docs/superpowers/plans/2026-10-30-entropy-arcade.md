@@ -655,6 +655,63 @@ Course rules (`src/glide.rs`):
   - Check that the game playfields still respond to touch under the new chrome.
 - [ ] **Step 4: Commit:** `"feat: iPhone OS 1 chrome across screens"`
 
+
+### Task 18: Remove Glitch Glider; finish the screen polish
+
+**Files:** Delete `crates/entropy-core/src/glide.rs`, `src/glide.rs` and `ui/screens/glide.slint`, plus Glider icon assets that nothing else uses. Modify `crates/entropy-core/src/{lib.rs,pool.rs,session.rs}`, `src/main.rs`, `ui/state.slint`, `ui/app.slint` and `ui/screens/home.slint`.
+
+- [ ] **Step 1: Remove the Glider.**
+  - Remove `GlideTimer`, `Session::glide_tap` / `glide_learning` and every glide field.
+  - Remove `EntropyPool::add_glide` and `TAG_GLIDE` (0x05 stays unused; don't reuse it).
+  - Remove `Screen.glide`, the glide AppState properties and callbacks, the glide timer wiring, and game index 3.
+  - Keep `mcv.rs` and its tests: Shard Stack uses them.
+  - Home becomes 5 games: the grid holds Shard and How it works, and the dock holds Painter, Outguess, Hunt and Dice.
+  - Remove glide-only tests.
+  - Afterwards nothing may reference "glide" except the spec's history note.
+- [ ] **Step 2: Finish the uncommitted polish.** A stopped agent left uncommitted UI work in the working tree: dice, error, hunt, outguess, painter and shard screens, `state.slint`, `main.rs`, `hunt.rs`, and a display-only `Session::shard_preview`.
+  - Review it with `git diff`. Keep what is sound and consistent with the iPhone OS 1 chrome, drop the Glider parts, and fix or drop anything half-finished.
+  - `shard_preview` must stay display-only: no absorb, no credit. Give it a test.
+- [ ] **Step 3: Verify.**
+  - Run the full `cargo test -p entropy-core --lib` (warning-free).
+  - Run `foundation sim` and screenshot every screen.
+  - Do a full 12-word Painter run through both slide confirms.
+  - Touch-test Outguess, Hunt, Shard and Dice.
+- [ ] **Step 4: Commit:** `"feat: remove Glitch Glider; finish screen polish"`
+
+### Task 19: Outguess Duel (2 players, one device)
+
+**Files:**
+- Modify `crates/entropy-core/src/{outguess.rs,session.rs,pool.rs}`, `ui/screens/outguess.slint` (or a new `duel.slint`), `ui/state.slint`, `ui/screens/home.slint` and `src/main.rs`.
+
+**Interfaces:**
+- Core:
+  - `pub struct Duel` (`Zeroize`) holds per-player `Oracle`s, per-player opponent-read counters over the last 32 moves, roles, scores and the round number.
+  - `Duel::round(&mut self, hider_door: u8, seeker_guess: u8, hider_tap: (i32, i32, u64), seeker_tap: (i32, i32, u64)) -> DuelRound`.
+  - `DuelRound { seeker_hit: bool, credit_mbits: [u32; 2], healthy: [bool; 2], scores: [u8; 2], roles_swapped: bool, winner: Option<u8> }`.
+  - Per player: `hits = max(machine best-expert hindsight hits, opponent's correct reads of this player)` over `n ≤ 32`, then `p_ub = min(1, (hits + 4) / n)` and credit `= floor(−log2 p_ub · 1000)` capped at 2000. There is no credit for the first 16 moves per player. Unhealthy (`p_ub > 0.5` after warm-up) earns 0.
+  - Roles swap every 5 rounds; the first to 10 wins.
+  - Both doors and both taps are absorbed under `TAG_OUTGUESS` with a player marker. `Session::duel_round(...)` adds both credits to `game_mbits`.
+- App:
+  - Split screen: the top half is rotated 180°. Each half has a 2×2 door grid and a "Hider"/"Seeker" label. The meter sits in the middle band.
+  - A 3 s lock-in: each half shows "Locked" after its tap and hides the choice. Reveal comes when both are locked: doors flash and the scores update.
+  - `start-arcade(words, 1)` takes a `players` argument from the Outguess card's 1/2 segmented switch. With 1 player, behaviour is unchanged.
+  - Done once full, as before, then the normal Summary → Words flow (shown to the owner only).
+
+- [ ] **Step 1: Failing tests** (`outguess.rs`):
+
+```rust
+#[test] fn duel_seeker_mirroring_hider_is_read() { /* seeker always guesses the hider's previous door, hider repeats doors → hider credit 0 after warm-up (opponent reads it) */ }
+#[test] fn duel_both_random_both_earn() { /* both players SHA-256 doors, 128 rounds → each player's total ≥ 50_000 */ }
+#[test] fn duel_constant_player_earns_nothing() { /* player 1 always door 2 → player 1 total 0, player 2 unaffected */ }
+#[test] fn duel_roles_swap_and_winner() { /* roles swap every 5 rounds; first to 10 → winner Some */ }
+#[test] fn duel_wipe_clears_state() { }
+```
+
+- [ ] **Step 2:** RED, then implement, then GREEN, then the full suite.
+- [ ] **Step 3: UI** as above, in the iPhone OS 1 chrome (NavBar with "Home", ProgressMeter in the middle band, glossy door buttons). Never log doors, guesses or taps.
+- [ ] **Step 4: Verify in the simulator.** Play about 20 rounds, tapping both halves. Check the lock-in hides choices, the reveal, the role swap, and that the meter climbs only with varied play. Screenshot.
+- [ ] **Step 5: Commit:** `"feat: Outguess Duel (2 players, one device)"`
+
 ---
 
 ## Time budget
