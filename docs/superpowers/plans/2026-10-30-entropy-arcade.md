@@ -561,6 +561,16 @@ Course rules (`src/glide.rs`):
       - P5: same column as last (best rotation there)
       - P6: same (rot, col) as last, if legal
     - P7..P14 are lag-k repeats of the *rank* (k = 1..8). They hit when the chosen rank equals the rank k moves ago.
+    - **Round-2 addition (review):**
+      - Piece- and rotation-aware policies:
+        - spawn default (rot 0, centred), the placement "just press Drop" gives
+        - heuristic best and lowest landing restricted to rot 0
+        - the same two restricted to the last-used rotation index
+        - per piece type, the last (rot, col) used for that type
+        - per piece type, the most frequent column used for that type
+      - **An unhealthy piece earns 0.** This applies to Glitch Glider's `glide_tap` too (spec: "Unhealthy data … earns no credit").
+      - Drags and rotations are absorbed (`TAG_SHARD`, a move marker plus `t_us`) but never credited.
+      - `leave` resets the app's `Shard` state.
     - **Round-1 addition:** lag-k repeats of the *column* (k = 2..8, best rotation there) and of the full (rot, col) (k = 2..8). They catch human column cycles such as 0, 2, 4, 6.
     - Each keeps hits over the last 64 pieces. `p_ub = min(1, (max hits + 4) / n)`, and `pol_mbits = floor(−log2 p_ub · 1000)`.
     - Credit = `min(mcv.credit, pol_mbits)`, capped at 3000.
@@ -579,6 +589,8 @@ Course rules (`src/glide.rs`):
 #[test] fn shard_fixed_policies_earn_nothing() { /* 120 pieces each under: always leftmost, always rightmost, always centre, always lowest landing → each total ≤ 3_000 mbits */ }
 #[test] fn shard_rank_cycle_earns_little() { /* choose ranks cycling 0,1,2,3 (when available), 120 pieces → total ≤ 30_000. Ruled residual: ties make the realised ranks depend on PRNG pieces, and no human can see ranks. */ }
 #[test] fn shard_column_cycle_earns_nothing() { /* drop in columns cycling 0,2,4,6 (best rotation there, else the nearest legal column), 120 pieces → total ≤ 3_000 */ }
+#[test] fn shard_unhealthy_earns_nothing() { /* "just press Drop" (spawn default every piece), 120 pieces → total ≤ 3_000 */ }
+#[test] fn shard_piece_driven_habits_earn_nothing() { /* "never rotate, best column for rot 0" and "fixed column per piece type (nearest legal)", 120 pieces each over 4 seeds → each total ≤ 3_000 */ }
 #[test] fn shard_piece_sequence_is_not_credited() { /* identical choices (always rank 0) under two different piece sequences → both earn 0 */ }
 #[test] fn wipe_clears_board() { /* place pieces, wipe, cells all zero */ }
 ```
