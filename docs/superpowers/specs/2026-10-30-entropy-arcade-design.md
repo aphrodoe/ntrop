@@ -156,6 +156,7 @@ smooth meter animation. Use the SDK UI kit components and theme where they exist
 
 - Entropy Arcade concept, combining several play sources with mixing.
 - A design doc first.
+- Camera credit only while drawing, capped at 50% of the target (confirmed 2026-10-30).
 
 ## Calls made by Claude (open to change)
 
@@ -164,7 +165,6 @@ smooth meter animation. Use the SDK UI kit components and theme where they exist
 - Dice Duel uses Coldcard's SHA-256-of-rolls method, for compatibility with existing verify tools.
 - Master fingerprint plus randomart as the "seed fingerprint".
 - App name: "Entropy Arcade".
-- Camera credit counts only while drawing and is capped at 50% of the target ("combo" boost), so the meter never fills by waiting.
 - Quiz uses 4-way multiple choice, not the system keyboard. The UI claims "App buffers wiped", not "all memory".
 - Touch credit is based on coordinates only. Δt is hashed in but not credited or tested (no hardware timestamps).
 
