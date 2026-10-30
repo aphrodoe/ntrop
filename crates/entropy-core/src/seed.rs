@@ -18,14 +18,22 @@ pub fn words(entropy: &[u8]) -> Zeroizing<Vec<String>> {
 
 /// Standard SeedQR: each word's BIP39 index as 4 zero-padded digits.
 pub fn seedqr_digits(entropy: &[u8]) -> Zeroizing<String> {
-    Zeroizing::new(mnemonic(entropy).word_indices().map(|i| format!("{i:04}")).collect())
+    use std::fmt::Write;
+    let m = mnemonic(entropy);
+    // Exact capacity: a reallocating String would leave seed digits in freed buffers.
+    let mut out = Zeroizing::new(String::with_capacity(m.word_count() * 4));
+    for i in m.word_indices() {
+        write!(out, "{i:04}").unwrap();
+    }
+    out
 }
 
 /// QR modules, row-major, `true` = dark.
-pub fn qr_matrix(data: &str) -> (usize, Vec<bool>) {
+/// qrcode's own internal module buffer can't be wiped; ours is.
+pub fn qr_matrix(data: &str) -> (usize, Zeroizing<Vec<bool>>) {
     let code = qrcode::QrCode::new(data).expect("SeedQR data fits in a QR code");
     let dark = code.to_colors().into_iter().map(|c| c == qrcode::Color::Dark).collect();
-    (code.width(), dark)
+    (code.width(), Zeroizing::new(dark))
 }
 
 /// BIP32 master key fingerprint (empty passphrase): first 4 bytes of HASH160(master pubkey).
@@ -70,8 +78,20 @@ mod tests {
     }
 
     #[test]
+    fn mnemonic_is_zeroizable() {
+        fn assert_zod<T: zeroize::ZeroizeOnDrop>() {}
+        assert_zod::<bip39::Mnemonic>();
+    }
+
+    #[test]
+    fn seedqr_never_reallocates() {
+        let d = seedqr_digits(&[0u8; 32]);
+        assert_eq!((d.len(), d.capacity()), (96, 96));
+    }
+
+    #[test]
     fn qr_is_square() {
-        let (n, m) = qr_matrix("0123");
+        let (n, m): (usize, Zeroizing<Vec<bool>>) = qr_matrix("0123");
         assert!(n >= 21);
         assert_eq!(m.len(), n * n);
     }

@@ -1,9 +1,12 @@
 //! Backup quiz: 3 random word positions, each a 4-way multiple choice (no system keyboard).
 
 use sha2::{Digest, Sha256};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 const QUESTIONS: usize = 3;
 
+/// Holds real seed words, so it wipes itself on drop.
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct QuizQuestion {
     /// 1-based word position.
     pub position: usize,
@@ -73,6 +76,12 @@ mod tests {
                 assert_eq!(c.len(), 4, "choices must be distinct");
             }
         }
+    }
+
+    #[test]
+    fn quiz_question_zeroizes_on_drop() {
+        fn assert_zod<T: zeroize::ZeroizeOnDrop>() {}
+        assert_zod::<QuizQuestion>();
     }
 
     #[test]

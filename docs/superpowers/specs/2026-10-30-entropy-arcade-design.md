@@ -71,12 +71,13 @@ the target.
 
 ## Health tests (inspired by NIST SP 800-90B, simplified)
 
-- **Touch, repetition count:** a sample whose (Δx, Δy) is (0, 0), or which repeats the
-  previous delta exactly, earns no credit. After 8 consecutive bad samples the source is
+- **Touch, repetition count:** a sample whose (Δx, Δy) is (0, 0), or which equals any of
+  the last 4 deltas (catches two-spot tapping and short cycles), earns no credit. After 8 consecutive bad samples the source is
   flagged unhealthy until movement resumes.
 - **Touch, adaptive proportion:** in a window of 64 samples, if one (Δx, Δy) pair
-  accounts for more than 50% of them, flag the source (catches scripted, straight-line
-  or synthetic input). Δt is measured with `Instant::now()` in the callback and hashed
+  accounts for more than 50% of them, flag the source (catches dominant repeated
+  input; long scripted cycles can still pass, which is why credit is a conservative estimate
+  and the hardware RNG is always mixed in). Δt is measured with `Instant::now()` in the callback and hashed
   in, but it is **not** health-tested or credited. Slint gives no hardware timestamp, and
   events are likely quantized to the frame rate, so timing-jitter claims would be dishonest.
 - **Camera, stuck frame:** if a frame's hash equals the previous frame's, or the mean

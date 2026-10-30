@@ -3,6 +3,8 @@
 
 /// Consecutive bad touch deltas before the touch source is flagged unhealthy.
 pub const TOUCH_RCT_LIMIT: u32 = 8;
+/// A delta equal to any of the last this-many deltas is bad (catches A,B,A,B tapping and short cycles).
+pub const TOUCH_RECENT: usize = 4;
 /// Adaptive-proportion window (touch deltas).
 pub const TOUCH_APT_WINDOW: usize = 64;
 /// A delta occurring more than this many times in the window flags the source.
@@ -22,10 +24,10 @@ pub enum Verdict {
 use std::collections::VecDeque;
 
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 #[derive(Default)]
 pub struct TouchHealth {
-    prev: Option<(i32, i32)>,
     bad_run: u32,
     window: VecDeque<(i32, i32)>,
 }
@@ -33,8 +35,7 @@ pub struct TouchHealth {
 impl TouchHealth {
     pub fn check(&mut self, dx: i32, dy: i32) -> Verdict {
         let d = (dx, dy);
-        let bad = d == (0, 0) || self.prev == Some(d);
-        self.prev = Some(d);
+        let bad = d == (0, 0) || self.window.iter().rev().take(TOUCH_RECENT).any(|&w| w == d);
 
         if self.window.len() == TOUCH_APT_WINDOW {
             self.window.pop_front();
@@ -52,6 +53,15 @@ impl TouchHealth {
             Verdict::Good
         }
     }
+
+    /// Recent deltas are entropy input, so they are wiped, not just dropped.
+    pub fn wipe(&mut self) {
+        for (x, y) in self.window.iter_mut() {
+            x.zeroize();
+            y.zeroize();
+        }
+        *self = Self::default();
+    }
 }
 
 #[derive(Default)]
@@ -62,6 +72,12 @@ pub struct CameraHealth {
 }
 
 impl CameraHealth {
+    pub fn wipe(&mut self) {
+        self.prev_hash.zeroize();
+        self.prev_nibbles.zeroize();
+        *self = Self::default();
+    }
+
     pub fn check(&mut self, frame: &[u8]) -> Verdict {
         let hash: [u8; 32] = Sha256::digest(frame).into();
         let nibbles: Vec<u8> = frame.iter().step_by(16).map(|b| b & 0x0f).collect();
@@ -146,6 +162,24 @@ mod tests {
             assert_ne!(h.check(100 + i, 1), Verdict::Unhealthy);
         }
         assert!(flagged);
+    }
+
+    #[test]
+    fn touch_two_spot_tapping_earns_nothing() {
+        let mut h = TouchHealth::default();
+        let good = (0..64)
+            .filter(|i| h.check(if i % 2 == 0 { 40 } else { -40 }, 0) == Verdict::Good)
+            .count();
+        assert!(good <= 2, "A,B,A,B earned {good}");
+        assert_eq!(h.check(40, 0), Verdict::Unhealthy);
+    }
+
+    #[test]
+    fn touch_short_cycle_earns_little() {
+        // uneven-speed straight drag: deltas cycle through a tiny set
+        let mut h = TouchHealth::default();
+        let good = (0..90).filter(|i| h.check([3, 4, 5, 4][i % 4], 0) == Verdict::Good).count();
+        assert!(good <= 3, "short cycle earned {good}");
     }
 
     #[test]

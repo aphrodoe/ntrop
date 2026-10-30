@@ -1,7 +1,7 @@
 //! Entropy pool: absorbs every sample, credits conservative bits, mixes with hardware randomness.
 
 use sha2::{Digest, Sha256};
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::health::{CameraHealth, TouchHealth, Verdict};
 use crate::WordCount;
@@ -23,7 +23,7 @@ const CAMERA_TOUCH_WINDOW_US: u64 = 250_000;
 
 pub struct EntropyPool {
     wc: WordCount,
-    // ponytail: Sha256 state can't be zeroized (no zeroize impl in sha2 0.10); it is dropped in finish().
+    /// Under "don't trust the chip", this running digest is the secret: wiped in `wipe()` / on drop.
     hasher: Sha256,
     last_touch: Option<(i32, i32)>,
     last_touch_us: Option<u64>,
@@ -64,7 +64,7 @@ impl EntropyPool {
         raw[4..8].copy_from_slice(&y.to_le_bytes());
         raw[8..].copy_from_slice(&t_us.to_le_bytes());
         self.absorb(TAG_TOUCH, &raw);
-        self.last_touch_us = Some(t_us);
+        raw.zeroize();
 
         let Some((px, py)) = self.last_touch.replace((x, y)) else {
             return SampleResult::Uncredited;
@@ -72,6 +72,7 @@ impl EntropyPool {
         match self.touch_health.check(x - px, y - py) {
             Verdict::Good => {
                 self.touch_ok = true;
+                self.last_touch_us = Some(t_us); // only healthy touch counts as "drawing" for the camera
                 self.touch_bits += TOUCH_BITS_PER_SAMPLE;
                 SampleResult::Credited(TOUCH_BITS_PER_SAMPLE)
             }
@@ -105,6 +106,26 @@ impl EntropyPool {
         SampleResult::Credited(bits)
     }
 
+    /// Zeroizes all pool state and resets to a fresh pool of the same word count.
+    pub fn wipe(&mut self) {
+        // SAFETY: Sha256 is plain fixed-size data (state words + block buffer), no pointers or Drop.
+        unsafe { zeroize::zeroize_flat_type(&mut self.hasher) };
+        if let Some((x, y)) = self.last_touch.as_mut() {
+            x.zeroize();
+            y.zeroize();
+        }
+        self.touch_health.wipe();
+        self.camera_health.wipe();
+        // Field-wise reset: `*self = Self::new(..)` would drop the old pool and recurse through Drop.
+        self.hasher = Sha256::new();
+        self.last_touch = None;
+        self.last_touch_us = None;
+        self.touch_bits = 0;
+        self.camera_bits = 0;
+        self.touch_ok = true;
+        self.camera_ok = true;
+    }
+
     pub fn touch_bits(&self) -> u32 {
         self.touch_bits
     }
@@ -130,8 +151,8 @@ impl EntropyPool {
     }
 
     /// `SHA-256(DOMAIN ‖ hw_random ‖ pool_digest)`, truncated to the word count's entropy length.
-    pub fn finish(self, hw_random: &[u8; 32]) -> Zeroizing<Vec<u8>> {
-        let pool_digest = Zeroizing::new(self.hasher.finalize());
+    pub fn finish(mut self, hw_random: &[u8; 32]) -> Zeroizing<Vec<u8>> {
+        let pool_digest = Zeroizing::new(self.hasher.finalize_reset());
         let mut h = Sha256::new();
         h.update(DOMAIN);
         h.update(hw_random);
@@ -142,6 +163,12 @@ impl EntropyPool {
     }
 }
 
+impl Drop for EntropyPool {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,7 +176,11 @@ mod tests {
     /// Feeds `n + 1` touch samples (a pseudo-random walk, so deltas never repeat) from t_us = `t0`.
     fn scribble(p: &mut EntropyPool, n: u32, t0: u64) {
         for i in 0..=n {
-            let h = (i ^ (t0 as u32)).wrapping_mul(2_654_435_761);
+            // murmur3 finalizer: a plain multiply is linear, so its deltas would repeat
+            let mut h = (i ^ (t0 as u32)).wrapping_mul(0x9e37_79b1);
+            h ^= h >> 15;
+            h = h.wrapping_mul(0x85eb_ca6b);
+            h ^= h >> 13;
             p.add_touch((h % 480) as i32, ((h >> 12) % 800) as i32, t0 + i as u64 * 16_000);
         }
     }
@@ -204,8 +235,9 @@ mod tests {
         p.add_camera_frame(&noisy_frame(1), 0);
         p.add_camera_frame(&noisy_frame(2), 10_000);
         assert_eq!(p.camera_bits(), 0);
-        p.add_touch(5, 5, 100_000);
-        p.add_camera_frame(&noisy_frame(3), 300_000); // 200 ms after touch
+        p.add_touch(5, 5, 90_000); // first sample: uncredited, not "drawing"
+        p.add_touch(9, 12, 100_000);
+        p.add_camera_frame(&noisy_frame(3), 300_000); // 200 ms after a credited touch
         assert_eq!(p.camera_bits(), 4);
         p.add_camera_frame(&noisy_frame(4), 400_000); // 300 ms after touch
         assert_eq!(p.camera_bits(), 4);
@@ -216,10 +248,32 @@ mod tests {
         let mut p = EntropyPool::new(WordCount::Twelve);
         for i in 0..200u32 {
             let t = i as u64 * 20_000;
-            p.add_touch(i as i32 * 3, (i as i32 * 7) % 101, t);
+            scribble(&mut p, 0, t);
             p.add_camera_frame(&noisy_frame(i), t + 1_000);
         }
         assert_eq!(p.camera_bits(), 64);
+    }
+
+    #[test]
+    fn camera_no_credit_while_touch_unhealthy() {
+        let mut p = EntropyPool::new(WordCount::TwentyFour);
+        for i in 0..100u32 {
+            let t = i as u64 * 20_000;
+            p.add_touch(200, 300, t); // finger held on one spot
+            p.add_camera_frame(&noisy_frame(i), t + 1_000);
+        }
+        assert!(!p.touch_healthy());
+        assert_eq!(p.camera_bits(), 0);
+    }
+
+    #[test]
+    fn wipe_resets_pool() {
+        let hw = [5u8; 32];
+        let mut p = EntropyPool::new(WordCount::TwentyFour);
+        scribble(&mut p, 50, 0);
+        p.wipe();
+        assert_eq!(p.credited_bits(), 0);
+        assert_eq!(p.finish(&hw), EntropyPool::new(WordCount::TwentyFour).finish(&hw));
     }
 
     #[test]
