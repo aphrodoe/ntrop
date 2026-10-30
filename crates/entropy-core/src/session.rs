@@ -3,7 +3,7 @@
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
-    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, EntropyPool, QuizQuestion, SampleResult, WordCount,
+    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, glide::GlideTimer, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
 };
 
 pub struct Session {
@@ -15,6 +15,8 @@ pub struct Session {
     quiz: Vec<QuizQuestion>,
     step: usize,
     oracle: Oracle,
+    glide: GlideTimer,
+    glide_mcv: Mcv,
     rolls: Zeroizing<Vec<u8>>,
 }
 
@@ -31,7 +33,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), glide: GlideTimer::default(), glide_mcv: Mcv::new(32, 2000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
     }
 }
 
@@ -63,6 +65,15 @@ impl Session {
             p.add_outguess(door, x, y, t_us, m.credit_mbits, m.healthy);
         }
         m
+    }
+
+    /// Records a Glitch Glider tap: absorbed always; credit only when the timing residual has a symbol.
+    pub fn glide_tap(&mut self, x: i32, y: i32, t_us: u64) -> Estimate {
+        let e = self.glide.tap(t_us).map_or(Estimate { credit_mbits: 0, healthy: true }, |s| self.glide_mcv.push(s));
+        if let Some(p) = self.pool.as_mut() {
+            p.add_glide(x, y, t_us, e.credit_mbits, e.healthy);
+        }
+        e
     }
 
     pub fn on_shot(&mut self, tap_x: i32, tap_y: i32, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult {
@@ -145,6 +156,8 @@ impl Session {
         self.quiz = Vec::new(); // QuizQuestion zeroizes on drop
         self.step = 0;
         self.oracle.wipe();
+        self.glide.zeroize();
+        self.glide_mcv.wipe();
         self.rolls.zeroize();
     }
 
@@ -295,6 +308,7 @@ mod tests {
         for i in 0..64u32 { s.outguess_pick(sha2::Sha256::digest(i.to_le_bytes())[0] & 3, 1, 2, i as u64); }
         assert!(s.pool().unwrap().game_bits() > 0);
     }
+    #[test] fn wipe_resets_glide() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); for i in 0..20u64 { s.glide_tap(1, 1, i * 400_000); } s.wipe(); s.start_arcade(WordCount::Twelve); assert!(s.glide.tap(0).is_none() && s.glide_mcv.push(1).credit_mbits == 0); }
     #[test] fn on_shot_feeds_pool() { let mut s = Session::new(); assert_eq!(s.on_shot(0, 0, 1, 2, 0), SampleResult::Uncredited); s.start_arcade(WordCount::Twelve); s.on_shot(5, 5, 1, 2, 0); s.on_shot(9, 12, 4, 7, 1); assert_eq!(s.pool().unwrap().game_bits(), 1); }
     #[test] fn dice_session_matches_core() {
         let r: Vec<u8> = "12345612345612345612345612345612345612345612345612".bytes().map(|b| b - b'0').collect();

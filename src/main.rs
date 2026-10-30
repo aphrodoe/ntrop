@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 mod camera;
+mod glide;
 mod haptics;
 mod hunt;
 mod theme;
@@ -188,6 +189,18 @@ fn start_frames(timer: &slint::Timer, ui: &slint::Weak<AppWindow>, hunt: &Rc<Ref
     });
 }
 
+/// 16 ms flight timer for Glitch Glider (reuses the Hunt timer object; stopped on every exit).
+fn start_glide(timer: &slint::Timer, ui: &slint::Weak<AppWindow>, g: &Rc<RefCell<glide::Glide>>, pillars: &Rc<VecModel<Pillar>>) {
+    let (ui, g, pillars) = (ui.clone(), g.clone(), pillars.clone());
+    timer.start(slint::TimerMode::Repeated, Duration::from_millis(16), move || {
+        let Some(ui) = ui.upgrade() else { return };
+        let mut g = g.borrow_mut();
+        g.tick(16);
+        ui.global::<AppState>().set_glider_y(g.y);
+        pillars.set_vec(g.pillars().into_iter().map(|x| Pillar { x, gap_y: glide::GAP_Y }).collect::<Vec<_>>());
+    });
+}
+
 fn app_main(_cx: AppContext, ui: AppWindow) {
     log_server::init_wait(env!("CARGO_CRATE_NAME")).unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -204,10 +217,14 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     let hunt = Rc::new(RefCell::new(hunt::Hunt::new(1)));
     let gesture = Rc::new(RefCell::new(Gesture::default()));
     let hunt_timer = Rc::new(slint::Timer::default());
+    let glide = Rc::new(RefCell::new(glide::Glide::new()));
+    let pillars: Rc<VecModel<Pillar>> = Rc::new(VecModel::default());
+    st.set_pillars(ModelRc::from(pillars.clone()));
     let pop = Rc::new(Cell::new(0u32)); // ms left on the "+1 bit" pop
 
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
     let (h, g, ht, pop2) = (hunt.clone(), gesture.clone(), hunt_timer.clone(), pop.clone());
+    let (gl, pl) = (glide.clone(), pillars.clone());
     st.on_start_arcade(move |n, game| {
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
@@ -223,7 +240,8 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         st.set_last_credit(SharedString::new());
         st.set_read_pct(0);
         st.set_hunt_pop(SharedString::new());
-        ht.stop();
+        st.set_glide_note(SharedString::new());
+        ht.stop(); // the one frame timer serves Hunt and Glider
         st.set_screen(match game {
             1 => Screen::Outguess,
             2 => {
@@ -232,6 +250,11 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
                 *g.borrow_mut() = Gesture::default();
                 start_frames(&ht, &u, &h, &pop2);
                 Screen::Hunt
+            }
+            3 => {
+                *gl.borrow_mut() = glide::Glide::new();
+                start_glide(&ht, &u, &gl, &pl);
+                Screen::Glide
             }
             _ => Screen::Painter,
         });
@@ -250,6 +273,17 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         st.set_last_hit(m.hit);
         st.set_last_credit(SharedString::from(format!("+{:.1} bits", m.credit_mbits as f32 / 1000.0).as_str()));
         st.set_read_pct(m.read_pct as i32);
+        credit(&ui, &s.borrow(), &f);
+    });
+
+    let (u, s, f, gl) = (ui.as_weak(), session.clone(), fb.clone(), glide.clone());
+    st.on_glide_tap(move |x, y| {
+        let ui = u.upgrade().unwrap();
+        let t_us = start.elapsed().as_micros() as u64;
+        gl.borrow_mut().tap();
+        let e = s.borrow_mut().glide_tap(x as i32, y as i32, t_us);
+        let note = if !e.healthy { "Too steady: vary your timing".into() } else { format!("+{:.1} bits", e.credit_mbits as f32 / 1000.0) };
+        ui.global::<AppState>().set_glide_note(SharedString::from(note.as_str()));
         credit(&ui, &s.borrow(), &f);
     });
 

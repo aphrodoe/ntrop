@@ -3,7 +3,9 @@
 
 pub mod dice;
 pub mod feedback;
+pub mod glide;
 pub mod health;
+pub mod mcv;
 pub mod outguess;
 pub mod pool;
 pub mod quiz;
@@ -11,6 +13,7 @@ pub mod randomart;
 pub mod session;
 pub mod seed;
 
+pub use mcv::{Estimate, Mcv};
 pub use dice::{dice_entropy, min_rolls, DiceError};
 pub use outguess::{Move, Oracle};
 pub use pool::{EntropyPool, SampleResult};

@@ -17,6 +17,7 @@ const TAG_TOUCH: u8 = 0x01;
 const TAG_CAMERA: u8 = 0x02;
 const TAG_OUTGUESS: u8 = 0x03;
 const TAG_SHOT: u8 = 0x04;
+const TAG_GLIDE: u8 = 0x05;
 const SHOT_MBITS: u32 = 1000;
 const DOMAIN: &[u8] = b"entropy-arcade/v1";
 const TOUCH_BITS_PER_SAMPLE: u32 = 1;
@@ -100,12 +101,21 @@ impl EntropyPool {
 
     /// Absorbs a door pick (`door ‖ x ‖ y ‖ t_us`) and adds the oracle's credit for it.
     pub fn add_outguess(&mut self, door: u8, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {
+        self.add_game(TAG_OUTGUESS, Some(door), x, y, t_us, credit_mbits, healthy);
+    }
+
+    /// Absorbs a Glitch Glider tap (`x ‖ y ‖ t_us`) and adds the MCV timing credit for it.
+    pub fn add_glide(&mut self, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {
+        self.add_game(TAG_GLIDE, None, x, y, t_us, credit_mbits, healthy);
+    }
+
+    fn add_game(&mut self, tag: u8, door: Option<u8>, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {
         let mut raw = [0u8; 17];
-        raw[0] = door;
-        raw[1..5].copy_from_slice(&x.to_le_bytes());
-        raw[5..9].copy_from_slice(&y.to_le_bytes());
-        raw[9..].copy_from_slice(&t_us.to_le_bytes());
-        self.absorb(TAG_OUTGUESS, &raw);
+        let n = if let Some(d) = door { raw[0] = d; 1 } else { 0 };
+        raw[n..n + 4].copy_from_slice(&x.to_le_bytes());
+        raw[n + 4..n + 8].copy_from_slice(&y.to_le_bytes());
+        raw[n + 8..n + 16].copy_from_slice(&t_us.to_le_bytes());
+        self.absorb(tag, &raw[..n + 16]);
         raw.zeroize();
         self.game_mbits = self.game_mbits.saturating_add(credit_mbits);
         self.game_ok = healthy;

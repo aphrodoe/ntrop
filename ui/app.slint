@@ -3,11 +3,12 @@
 
 import { Theme, UISize, Images, ControlSize } from "@ui/theme.slint";
 import { Button } from "@ui/button.slint";
-import { AppState, Screen, TrailDot } from "state.slint";
+import { AppState, Screen, TrailDot, Pillar } from "state.slint";
 import { HomeScreen } from "screens/home.slint";
 import { PainterScreen } from "screens/painter.slint";
 import { OutguessScreen } from "screens/outguess.slint";
 import { HuntScreen } from "screens/hunt.slint";
+import { GlideScreen } from "screens/glide.slint";
 import { SummaryScreen } from "screens/summary.slint";
 import { WordsScreen } from "screens/words.slint";
 import { SeedQrScreen } from "screens/seedqr.slint";
@@ -16,7 +17,7 @@ import { DoneScreen } from "screens/done.slint";
 import { DiceScreen } from "screens/dice.slint";
 import { ErrorScreen } from "screens/error.slint";
 
-export { AppState, Screen, TrailDot, Theme, Images, ControlSize }
+export { AppState, Screen, TrailDot, Pillar, Theme, Images, ControlSize }
 export component AppWindow inherits Window {
     title: "Entropy Arcade";
     preferred-width: UISize.screen-width;
@@ -27,6 +28,7 @@ export component AppWindow inherits Window {
     if AppState.screen == Screen.painter: PainterScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.outguess: OutguessScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.hunt: HuntScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.glide: GlideScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.summary: SummaryScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.error: ErrorScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.words: WordsScreen { width: parent.width; height: parent.height; }

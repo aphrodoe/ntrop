@@ -10,15 +10,14 @@ component GameCard inherits Rectangle {
     in property <string> hook;
     in property <color> accent;
     callback clicked();
-    height: 92px;
+    min-height: 96px;
     border-radius: Theme.radius-md;
     background: Theme.palette-surface;
     border-width: 2px;
     border-color: ta.pressed ? root.accent : Neon.line;
     HorizontalLayout {
-        padding: Theme.spacing-lg;
+        padding: Theme.spacing-md;
         spacing: Theme.spacing-md;
-        Rectangle { width: 6px; background: root.accent; border-radius: 3px; }
         VerticalLayout {
             alignment: center;
             spacing: Theme.spacing-xs;
@@ -34,7 +33,7 @@ component GameCard inherits Rectangle {
                 color: root.accent;
                 font-family: Theme.font-primary;
                 font-size: Theme.font-size-label;
-                overflow: elide;
+                wrap: word-wrap;
             }
         }
     }
@@ -89,10 +88,21 @@ export component HomeScreen inherits Rectangle {
         WordToggle { value: root.words; option: 12; picked => { root.words = 12; } }
         WordToggle { value: root.words; option: 24; picked => { root.words = 24; } }
     }
-    GameCard { title: "Chaos Painter"; hook: "Scribble. Your hand is the noise."; accent: Neon.touch; clicked => { AppState.start-arcade(root.words, 0); } }
-    GameCard { title: "Outguess the Machine"; hook: "Be less predictable than a bot."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 1); } }
-    GameCard { title: "Static Hunt"; hook: "Blast static ghosts. Your misses are the dice."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 2); } }
-    GameCard { title: "Dice Duel"; hook: "Roll real dice. No chip involved."; accent: Theme.palette-foreground; clicked => { AppState.start-dice(root.words); } }
+    GridLayout {
+        spacing: Theme.spacing-sm;
+        Row {
+            GameCard { title: "Chaos Painter"; hook: "Scribble. Your hand is the noise."; accent: Neon.touch; clicked => { AppState.start-arcade(root.words, 0); } }
+            GameCard { title: "Outguess"; hook: "Be less predictable than a bot."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 1); } }
+        }
+        Row {
+            GameCard { title: "Static Hunt"; hook: "Blast ghosts. Misses are dice."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 2); } }
+            GameCard { title: "Glitch Glider"; hook: "Tap to fly. Your timing wobble is the noise."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 3); } }
+        }
+        Row {
+            GameCard { title: "Shard Stack"; hook: "Coming soon."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 0); } } // routes to Painter until Task 15
+            GameCard { title: "Dice Duel"; hook: "Real dice. No chip."; accent: Theme.palette-foreground; clicked => { AppState.start-dice(root.words); } }
+        }
+    }
     Rectangle { vertical-stretch: 1; }
     Button { text: "How it works"; variant: ButtonVariant.ghost; clicked => { root.help = true; } }
     }
@@ -105,7 +115,7 @@ export component HomeScreen inherits Rectangle {
             "We mix your chaos with the chip's randomness: SHA-256(chip + you).",
             "Even if you play badly, it's never weaker than the chip.",
             "Credits are conservative estimates; stale input is rejected live.",
-            "Outguess and Static Hunt only pay for what the machine can't predict.",
+            "Outguess, Static Hunt and Glitch Glider only pay for what the machine can't predict.",
             "Dice Duel uses only your dice, so you can verify it on a laptop."
         ]: Text { text: line; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-body; wrap: word-wrap; }
     }

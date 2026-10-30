@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-export enum Screen { home, painter, outguess, hunt, summary, words, seedqr, quiz, done, dice, error }
+export enum Screen { home, painter, outguess, hunt, glide, summary, words, seedqr, quiz, done, dice, error }
 
 // Colours with no theme token: source identities plus the ink-palette extras.
 export global Neon {
@@ -12,6 +12,7 @@ export global Neon {
     out property <color> warning: #FFB020;
 }
 
+export struct Pillar { x: length, gap-y: length }
 export struct TrailDot { x: length, y: length, age: float }
 
 export global AppState {
@@ -29,7 +30,7 @@ export global AppState {
     in property <[TrailDot]> trail;
     in property <string> error-text;
 
-    callback start-arcade(int /* 12 | 24 */, int /* game: 0 painter, 1 outguess, 2 hunt */);
+    callback start-arcade(int /* 12 | 24 */, int /* game: 0 painter, 1 outguess, 2 hunt, 3 glider */);
     callback start-dice(int);
     // Dice Duel: rolls-text is masked ("•••• 1 5"), never the full rolls
     in property <int> roll-count;
@@ -53,6 +54,11 @@ export global AppState {
     callback hunt-press(length, length);
     callback hunt-move(length, length);
     callback hunt-release(length, length);
+    // Glitch Glider
+    in property <length> glider-y;
+    in property <[Pillar]> pillars;
+    in property <string> glide-note;
+    callback glide-tap(length, length);
     callback toggle-camera();
     callback painter-done();
     callback generate();
