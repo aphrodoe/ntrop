@@ -1,36 +1,32 @@
 // SPDX-License-Identifier: MIT
-// iPhone OS 1 style home icon. KeyOS uses Slint's line software renderer: no box-shadow and no
-// rounded corners on gradients, so the tile is a solid rounded tint under a pre-shaped shade/gloss
-// SVG, and the shadow is stacked translucent rects.
+// iPhone OS 1 style home icon (the original's 57 pt icon and 11 pt label, x1.5). KeyOS uses Slint's
+// line software renderer: no box-shadow and no rounded corners on gradients, so the tile is a solid
+// rounded tint under a pre-shaped shade/gloss SVG, and the shadow is stacked translucent rects.
 import { Ios } from "../state.slint";
 
 export component GlossyIcon inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <color> tint;
+    in property <length> label-y: 89px; // the dock sets its labels lower, in the label band
     callback clicked();
-    width: 110px;
-    height: 98px;
-    property <length> ix: (self.width - 76px) / 2;
+    width: 114px;
+    height: root.label-y + 20px;
+    property <length> ix: (self.width - 86px) / 2;
 
-    Rectangle { x: root.ix - 1px; y: 1px; width: 78px; height: 79px; border-radius: 15px; background: #00000040; }
-    Rectangle { x: root.ix; y: 2px; width: 76px; height: 76px; border-radius: 14px; background: #00000059; }
+    Rectangle { x: root.ix - 1px; y: 1px; width: 88px; height: 89px; border-radius: 17px; background: #00000040; }
+    Rectangle { x: root.ix; y: 2px; width: 86px; height: 86px; border-radius: 16px; background: #00000059; }
     Rectangle {
-        x: root.ix; y: 0; width: 76px; height: 76px; border-radius: 14px;
+        x: root.ix; y: 0; width: 86px; height: 86px; border-radius: 16px;
         background: root.tint;
-        Image { x: 10px; y: 10px; width: 56px; height: 56px; source: root.icon; }
-        Image { x: 0; y: 0; width: 76px; height: 76px; source: @image-url("../../resources/icons/gloss.svg"); }
-        if ta.pressed: Rectangle { border-radius: 14px; background: #00000066; }
+        Image { x: 11px; y: 11px; width: 64px; height: 64px; source: root.icon; }
+        Image { x: 0; y: 0; width: 86px; height: 86px; source: @image-url("../../resources/icons/gloss.svg"); }
+        if ta.pressed: Rectangle { border-radius: 16px; background: #00000066; }
     }
-    Text {
-        y: 81px; width: root.width; horizontal-alignment: center;
-        text: root.label; color: #000000CC;
-        font-family: Ios.font; font-size: 13px; font-weight: 700;
-    }
-    Text {
-        y: 80px; width: root.width; horizontal-alignment: center;
-        text: root.label; color: #FFFFFF;
-        font-family: Ios.font; font-size: 13px; font-weight: 700;
+    for c[i] in [#000000CC, #FFFFFF]: Text {
+        y: root.label-y + (1 - i) * 1px; width: root.width; horizontal-alignment: center;
+        text: root.label; color: c;
+        font-family: Ios.font; font-size: 16px; font-weight: 700;
     }
     ta := TouchArea { clicked => { root.clicked(); } }
 }

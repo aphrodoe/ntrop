@@ -45,13 +45,18 @@ export component GlideScreen inherits Rectangle {
                     y: 0px;
                     width: 56px;
                     height: 480px;
-                    // static-textured pillar: two stripes with a gap cut out by the two caps
+                    // flat pillar: two solid stripes with the gap between them
                     Rectangle { y: 0px; width: 100%; height: p.gap-y - 85px; background: Neon.line; border-color: Neon.game; border-width: 2px; }
                     Rectangle { y: p.gap-y + 85px; width: 100%; height: 480px - (p.gap-y + 85px); background: Neon.line; border-color: Neon.game; border-width: 2px; }
                 }
                 Rectangle { x: 120px - 18px; y: AppState.glider-y - 18px; width: 36px; height: 36px; border-radius: 18px; background: Neon.game.transparentize(0.65); }
                 Rectangle { x: 120px - 10px; y: AppState.glider-y - 10px; width: 20px; height: 20px; border-radius: 10px; background: Neon.game; }
-                TouchArea { clicked => { AppState.glide-tap(self.mouse-x, self.mouse-y); } }
+                // fire on press, not release, so a quick second tap is never swallowed
+                TouchArea {
+                    pointer-event(e) => {
+                        if e.kind == PointerEventKind.down { AppState.glide-tap(self.mouse-x, self.mouse-y); }
+                    }
+                }
             }
         }
     }
