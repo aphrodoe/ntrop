@@ -561,6 +561,7 @@ Course rules (`src/glide.rs`):
       - P5: same column as last (best rotation there)
       - P6: same (rot, col) as last, if legal
     - P7..P14 are lag-k repeats of the *rank* (k = 1..8). They hit when the chosen rank equals the rank k moves ago.
+    - **Round-1 addition:** lag-k repeats of the *column* (k = 2..8, best rotation there) and of the full (rot, col) (k = 2..8). They catch human column cycles such as 0, 2, 4, 6.
     - Each keeps hits over the last 64 pieces. `p_ub = min(1, (max hits + 4) / n)`, and `pol_mbits = floor(−log2 p_ub · 1000)`.
     - Credit = `min(mcv.credit, pol_mbits)`, capped at 3000.
     - Unhealthy if either estimate says so, or if `p_ub > 0.5` once 16 pieces are scored.
@@ -576,7 +577,8 @@ Course rules (`src/glide.rs`):
 #[test] fn shard_best_play_earns_nothing() { /* Session: 120 pieces from a SHA-256 counter, always placing the rank-0 placement → total credit 0 */ }
 #[test] fn shard_varied_play_earns() { /* same pieces, choose the placement whose rank = (SHA-256 counter byte % 8) when available → total ≥ 100_000 mbits */ }
 #[test] fn shard_fixed_policies_earn_nothing() { /* 120 pieces each under: always leftmost, always rightmost, always centre, always lowest landing → each total ≤ 3_000 mbits */ }
-#[test] fn shard_rank_cycle_earns_nothing() { /* choose ranks cycling 0,1,2,3 (when available), 120 pieces → total ≤ 3_000 */ }
+#[test] fn shard_rank_cycle_earns_little() { /* choose ranks cycling 0,1,2,3 (when available), 120 pieces → total ≤ 30_000. Ruled residual: ties make the realised ranks depend on PRNG pieces, and no human can see ranks. */ }
+#[test] fn shard_column_cycle_earns_nothing() { /* drop in columns cycling 0,2,4,6 (best rotation there, else the nearest legal column), 120 pieces → total ≤ 3_000 */ }
 #[test] fn shard_piece_sequence_is_not_credited() { /* identical choices (always rank 0) under two different piece sequences → both earn 0 */ }
 #[test] fn wipe_clears_board() { /* place pieces, wipe, cells all zero */ }
 ```
