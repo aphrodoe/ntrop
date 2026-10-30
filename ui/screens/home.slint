@@ -83,9 +83,9 @@ export component HomeScreen inherits VerticalLayout {
         WordToggle { value: root.words; option: 12; picked => { root.words = 12; } }
         WordToggle { value: root.words; option: 24; picked => { root.words = 24; } }
     }
-    GameCard { title: "Chaos Painter"; hook: "Scribble. Your hand is the dice."; accent: Neon.touch; clicked => { AppState.start-arcade(root.words, 0); } }
+    GameCard { title: "Chaos Painter"; hook: "Scribble. Your hand is the noise."; accent: Neon.touch; clicked => { AppState.start-arcade(root.words, 0); } }
     GameCard { title: "Outguess the Machine"; hook: "Be less predictable than a bot."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 1); } }
-    GameCard { title: "Static Hunt"; hook: "Hunt noise in the camera feed."; accent: Neon.camera; clicked => { AppState.start-arcade(root.words, 2); } }
-    GameCard { title: "Dice Duel"; hook: "Roll against the chip."; accent: Neon.warning; clicked => { AppState.start-dice(root.words); } }
+    GameCard { title: "Static Hunt"; hook: "Blast static ghosts. Your misses are the dice."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 2); } }
+    GameCard { title: "Dice Duel"; hook: "Roll real dice. No chip involved."; accent: Theme.palette-foreground; clicked => { AppState.start-dice(root.words); } }
     Rectangle { vertical-stretch: 1; }
 }

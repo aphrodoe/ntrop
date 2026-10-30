@@ -2,7 +2,7 @@
 
 import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
 import { Button } from "@ui/button.slint";
-import { AppState } from "../state.slint";
+import { AppState, Neon } from "../state.slint";
 import { Toast, ToastVariant } from "@ui/toast.slint";
 import { Meter } from "../widgets/meter.slint";
 
@@ -18,7 +18,7 @@ export component PainterScreen inherits Rectangle {
         width: 12px;
         height: 12px;
         border-radius: 6px;
-        background: Theme.palette-primary;
+        background: Neon.touch;
         opacity: 1 - d.age;
     }
     Text {
