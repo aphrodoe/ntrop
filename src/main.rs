@@ -2,9 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 mod haptics;
+mod hunt;
 mod theme;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
@@ -12,11 +13,15 @@ use entropy_core::{qr_matrix, QuizOutcome, SampleResult, Session, WordCount};
 use zeroize::Zeroizing;
 use slint_keyos_platform::app_ui2;
 use slint_keyos_platform::slint::{
-    ComponentHandle, Image, Model, ModelRc, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel,
+    ComponentHandle, Image, Model, ModelRc, Rgb8Pixel, Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel,
 };
 
 app_ui2!("Entropy Arcade");
 
+/// A press that moves more than this many px is a drag (look); otherwise its release is a shot.
+const DRAG_PX: f32 = 8.0;
+const FRAME_MS: u64 = 33;
+const POP_MS: u32 = 600;
 const MAX_TRAIL: usize = 200;
 /// Trail dot lifetime: age advances 1/60 per 16 ms tick, so a dot lasts ~1 s.
 const AGE_STEP: f32 = 1.0 / 60.0;
@@ -141,6 +146,51 @@ impl Feedback {
     }
 }
 
+#[derive(Default)]
+struct Gesture {
+    start: (f32, f32),
+    last: (f32, f32),
+    drag: bool,
+}
+
+/// Syncs the meter and fires haptics after a credited sample.
+fn credit(ui: &AppWindow, s: &Session, f: &RefCell<Feedback>) {
+    sync_meter(ui, s);
+    if let Some(p) = s.pool() {
+        f.borrow_mut().update(p.credited_bits(), s.target_bits(), p.is_full(), p.touch_healthy(), p.game_healthy());
+    }
+}
+
+/// 33 ms frame timer for Static Hunt; the caller stops it on every exit from the screen.
+fn start_frames(timer: &slint::Timer, ui: &slint::Weak<AppWindow>, hunt: &Rc<RefCell<hunt::Hunt>>, pop: &Rc<Cell<u32>>) {
+    let (ui, hunt, pop) = (ui.clone(), hunt.clone(), pop.clone());
+    let mut buf = SharedPixelBuffer::<Rgb8Pixel>::new(hunt::W, hunt::H);
+    let (mut frames, mut total) = (0u32, Duration::ZERO);
+    timer.start(slint::TimerMode::Repeated, Duration::from_millis(FRAME_MS), move || {
+        let t0 = Instant::now();
+        {
+            let mut h = hunt.borrow_mut();
+            h.tick(FRAME_MS as u32);
+            h.render(&mut buf);
+        }
+        let Some(ui) = ui.upgrade() else { return };
+        let st = ui.global::<AppState>();
+        st.set_hunt_frame(Image::from_rgb8(buf.clone()));
+        if pop.get() > 0 {
+            pop.set(pop.get().saturating_sub(FRAME_MS as u32));
+            if pop.get() == 0 {
+                st.set_hunt_pop(SharedString::new());
+            }
+        }
+        total += t0.elapsed();
+        frames += 1;
+        if frames == 100 {
+            log::info!("screen hunt frame_ms={}", total.as_secs_f32() * 10.0);
+            (frames, total) = (0, Duration::ZERO);
+        }
+    });
+}
+
 fn app_main(_cx: AppContext, ui: AppWindow) {
     log_server::init_wait(env!("CARGO_CRATE_NAME")).unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -154,7 +204,13 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     let st = ui.global::<AppState>();
     st.set_trail(ModelRc::from(trail.clone()));
 
+    let hunt = Rc::new(RefCell::new(hunt::Hunt::new(1)));
+    let gesture = Rc::new(RefCell::new(Gesture::default()));
+    let hunt_timer = Rc::new(slint::Timer::default());
+    let pop = Rc::new(Cell::new(0u32)); // ms left on the "+1 bit" pop
+
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
+    let (h, g, ht, pop2) = (hunt.clone(), gesture.clone(), hunt_timer.clone(), pop.clone());
     st.on_start_arcade(move |n, game| {
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
@@ -167,8 +223,19 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         st.set_last_hit(false);
         st.set_last_credit(SharedString::new());
         st.set_read_pct(0);
-        // Game 2 (hunt) lands in Task 10; until then it uses the Painter.
-        st.set_screen(if game == 1 { Screen::Outguess } else { Screen::Painter });
+        st.set_hunt_pop(SharedString::new());
+        ht.stop();
+        st.set_screen(match game {
+            1 => Screen::Outguess,
+            2 => {
+                let seed = hw_random().map_or(0x9e37_79b9 ^ start.elapsed().as_nanos() as u32, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
+                *h.borrow_mut() = hunt::Hunt::new(seed);
+                *g.borrow_mut() = Gesture::default();
+                start_frames(&ht, &u, &h, &pop2);
+                Screen::Hunt
+            }
+            _ => Screen::Painter,
+        });
         log::info!("arcade started: {} words", n);
     });
 
@@ -222,10 +289,56 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         st.set_camera_on(!st.get_camera_on());
     });
 
-    let (u, s) = (ui.as_weak(), session.clone());
+    let g = gesture.clone();
+    st.on_hunt_press(move |x, y| *g.borrow_mut() = Gesture { start: (x, y), last: (x, y), drag: false });
+
+    let (u, s, f, h, g) = (ui.as_weak(), session.clone(), fb.clone(), hunt.clone(), gesture.clone());
+    st.on_hunt_move(move |x, y| {
+        let ui = u.upgrade().unwrap();
+        let (x, y) = (x, y);
+        let mut gs = g.borrow_mut();
+        if !gs.drag && (x - gs.start.0).hypot(y - gs.start.1) > DRAG_PX {
+            gs.drag = true;
+        }
+        if !gs.drag {
+            return;
+        }
+        h.borrow_mut().turn((x - gs.last.0) as i32);
+        gs.last = (x, y);
+        let t_us = start.elapsed().as_micros() as u64;
+        let r = s.borrow_mut().on_touch(x as i32, y as i32, t_us);
+        if r != SampleResult::Uncredited {
+            credit(&ui, &s.borrow(), &f);
+        }
+    });
+
+    let (u, s, f, h, g, pop) = (ui.as_weak(), session.clone(), fb.clone(), hunt.clone(), gesture.clone(), pop.clone());
+    st.on_hunt_release(move |x, y| {
+        let ui = u.upgrade().unwrap();
+        let (x, y) = (x, y);
+        let mut gs = g.borrow_mut();
+        if gs.drag || (x - gs.start.0).hypot(y - gs.start.1) > DRAG_PX {
+            gs.drag = false;
+            return;
+        }
+        // View is 240x320 shown at 2x; the area is centred, so x is already relative to the image.
+        let Some((dx, dy)) = h.borrow_mut().tap((x / 2.0) as i32, (y / 2.0) as i32) else { return };
+        let t_us = start.elapsed().as_micros() as u64;
+        let r = s.borrow_mut().on_shot(dx, dy, t_us);
+        if r != SampleResult::Uncredited {
+            credit(&ui, &s.borrow(), &f);
+        }
+        if matches!(r, SampleResult::Credited(_)) {
+            ui.global::<AppState>().set_hunt_pop(SharedString::from("+1 bit"));
+            pop.set(POP_MS);
+        }
+    });
+
+    let (u, s, ht) = (ui.as_weak(), session.clone(), hunt_timer.clone());
     st.on_painter_done(move || {
         let ui = u.upgrade().unwrap();
         if s.borrow().pool().is_some_and(|p| p.is_full()) {
+            ht.stop();
             ui.global::<AppState>().set_screen(Screen::Summary);
         }
     });
@@ -312,8 +425,9 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     // finish() and back-home() both wipe the session and every secret-bearing UI property.
-    let (u, s, t) = (ui.as_weak(), session.clone(), trail.clone());
+    let (u, s, t, ht) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone());
     let leave = Rc::new(move || {
+        ht.stop();
         s.borrow_mut().wipe();
         t.set_vec(Vec::new());
         let ui = u.upgrade().unwrap();

@@ -56,6 +56,13 @@ impl Session {
         m
     }
 
+    pub fn on_shot(&mut self, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult {
+        match self.pool.as_mut() {
+            Some(p) => p.add_shot(miss_dx, miss_dy, t_us),
+            None => SampleResult::Uncredited,
+        }
+    }
+
     pub fn pool(&self) -> Option<&EntropyPool> {
         self.pool.as_ref()
     }
@@ -204,6 +211,7 @@ mod tests {
         for i in 0..64u32 { s.outguess_pick(sha2::Sha256::digest(i.to_le_bytes())[0] & 3, 1, 2, i as u64); }
         assert!(s.pool().unwrap().game_bits() > 0);
     }
+    #[test] fn on_shot_feeds_pool() { let mut s = Session::new(); assert_eq!(s.on_shot(1, 2, 0), SampleResult::Uncredited); s.start_arcade(WordCount::Twelve); s.on_shot(1, 2, 0); assert_eq!(s.pool().unwrap().game_bits(), 1); }
     #[test] fn fingerprint_matches_entropy() {
         let s = gen();
         let e = s.entropy.as_ref().unwrap();

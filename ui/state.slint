@@ -35,6 +35,12 @@ export global AppState {
     in property <string> last-credit;
     in property <int> read-pct;
     callback touch(length, length);
+    // Static Hunt: 240x320 frame shown at 2x
+    in property <image> hunt-frame;
+    in property <string> hunt-pop;
+    callback hunt-press(length, length);
+    callback hunt-move(length, length);
+    callback hunt-release(length, length);
     callback toggle-camera();
     callback painter-done();
     callback generate();

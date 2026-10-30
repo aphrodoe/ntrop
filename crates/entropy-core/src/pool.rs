@@ -16,6 +16,8 @@ pub enum SampleResult {
 const TAG_TOUCH: u8 = 0x01;
 const TAG_CAMERA: u8 = 0x02;
 const TAG_OUTGUESS: u8 = 0x03;
+const TAG_SHOT: u8 = 0x04;
+const SHOT_MBITS: u32 = 1000;
 const DOMAIN: &[u8] = b"entropy-arcade/v1";
 const TOUCH_BITS_PER_SAMPLE: u32 = 1;
 const CAMERA_BITS_PER_FRAME: u32 = 4;
@@ -30,6 +32,7 @@ pub struct EntropyPool {
     last_touch_us: Option<u64>,
     touch_health: TouchHealth,
     camera_health: CameraHealth,
+    shot_health: TouchHealth,
     touch_bits: u32,
     camera_bits: u32,
     touch_ok: bool,
@@ -48,6 +51,7 @@ impl EntropyPool {
             last_touch_us: None,
             touch_health: TouchHealth::default(),
             camera_health: CameraHealth::default(),
+            shot_health: TouchHealth::default(),
             touch_bits: 0,
             camera_bits: 0,
             touch_ok: true,
@@ -103,6 +107,28 @@ impl EntropyPool {
         self.game_ok = healthy;
     }
 
+    /// Absorbs a Static Hunt shot (miss offset from the ghost centre); a varied offset earns 1 bit.
+    pub fn add_shot(&mut self, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult {
+        let mut raw = [0u8; 16];
+        raw[..4].copy_from_slice(&miss_dx.to_le_bytes());
+        raw[4..8].copy_from_slice(&miss_dy.to_le_bytes());
+        raw[8..].copy_from_slice(&t_us.to_le_bytes());
+        self.absorb(TAG_SHOT, &raw);
+        raw.zeroize();
+        match self.shot_health.check(miss_dx, miss_dy) {
+            Verdict::Good => {
+                self.game_ok = true;
+                self.game_mbits = self.game_mbits.saturating_add(SHOT_MBITS);
+                SampleResult::Credited(1)
+            }
+            Verdict::Bad => SampleResult::Uncredited,
+            Verdict::Unhealthy => {
+                self.game_ok = false;
+                SampleResult::SourceUnhealthy
+            }
+        }
+    }
+
     pub fn add_camera_frame(&mut self, frame: &[u8], t_us: u64) -> SampleResult {
         self.absorb(TAG_CAMERA, frame);
         match self.camera_health.check(frame) {
@@ -135,6 +161,7 @@ impl EntropyPool {
         }
         self.touch_health.wipe();
         self.camera_health.wipe();
+        self.shot_health.wipe();
         // Field-wise reset: `*self = Self::new(..)` would drop the old pool and recurse through Drop.
         self.hasher = Sha256::new();
         self.last_touch = None;
@@ -328,6 +355,10 @@ mod tests {
         for i in 0..64 { p.add_outguess(1, 0, 0, i, 2000, true); }
         assert!(p.is_full());
     }
+
+    #[test] fn shot_repeated_offset_earns_once() { let mut p = EntropyPool::new(WordCount::Twelve); for i in 0..20 { p.add_shot(3, -2, i * 1000); } assert!(p.game_bits() <= 1); }
+    #[test] fn shot_bullseye_earns_nothing() { let mut p = EntropyPool::new(WordCount::Twelve); for i in 0..20 { p.add_shot(0, 0, i * 1000); } assert_eq!(p.game_bits(), 0); }
+    #[test] fn shots_varied_credit_one_bit_each() { let mut p = EntropyPool::new(WordCount::Twelve); for i in 0..10i32 { p.add_shot(i * 3 - 7, 11 - i * 5, i as u64 * 1000); } assert_eq!(p.game_bits(), 10); }
 
     #[test]
     fn wipe_resets_game_credit() {
