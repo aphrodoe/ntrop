@@ -158,7 +158,20 @@ Unhealthy data is still hashed into the pool (it can't hurt). It just earns no c
    Words, SeedQR, Quiz and Done flow, plus a "Verify on a laptop" panel showing the
    one-liner.
 
-**Visual direction: "Neon on ink"** (decided 2026-10-30). Each entropy source owns one
+**Visual direction (superseded 2026-10-31): iPhone OS 1 homage.** The app chrome mimics the
+2007 iPhone OS 1 look as closely as practical, with the user's direction to "mimic as close as
+possible":
+- the Home grid of glossy rounded-square icons (top-half gloss highlight, drop shadow, white labels with a dark text shadow) on black, with a reflective 4-slot glass dock;
+- a blue-grey gradient navigation bar (`#B0BCCD` → `#6D84A2`, 1 px dark bottom line) with a bold white engraved title and an arrow-shaped back button;
+- grouped tables on a pinstripe background (`#C5CCD4` with 1 px `#CBD2D8` vertical stripes every 4 px): white cells with 10 px corner radius, `#ABABAB` separators, black bold labels and `#385487` detail text;
+- "slide to …" confirm tracks (a dark glossy track, a silver knob with an arrow, and a shimmering grey label) for **slide to generate** and **slide to wipe**;
+- a glossy segmented control for 12/24 words, a glossy blue progress bar as the meter (keeping thin source-coloured segments), and dark translucent action sheets with glossy pill buttons for the quiz.
+- Font: Arimo Bold/Regular (OFL, metric-compatible with Helvetica), bundled.
+
+Game playfields keep their own art and the source colours below. No Apple logos, wording or
+icon artwork: every icon is original, and the device's system status bar is untouched.
+
+Previous direction, kept for the playfields and source colours: "Neon on ink". Each entropy source owns one
 colour everywhere: its meter segment, trail and accents.
 
 | Role | Hex |

@@ -611,6 +611,50 @@ Course rules (`src/glide.rs`):
 - [ ] **Step 4: Verify in the simulator.** Play about 25 pieces always into the left-most legal slot, then vary: report credits and screenshots.
 - [ ] **Step 5: Commit:** `"feat: Shard Stack with placement-rank credit"`
 
+
+### Task 16: iPhone OS 1 kit and Home
+
+**Files:**
+- Create: `ui/kit/{glossy_icon,nav_bar,grouped_cell,slide_confirm,segmented,progress_meter,action_sheet,pinstripe}.slint`, `resources/fonts/Arimo-Regular.ttf`, `resources/fonts/Arimo-Bold.ttf` (OFL, from the official googlefonts/arimo release, with its `OFL.txt`), and an icon set `resources/icons/*.svg` (paintbrush, doors, ghost, spark, shard, die, info; original art)
+- Modify: `ui/screens/home.slint`, `ui/state.slint` (add a `global Ios` with the spec's chrome colours), `ui/widgets/meter.slint`
+
+**Interfaces (Slint components, used by Task 17):**
+- `GlossyIcon { icon: image; label: string; tint: color; clicked }`: a 76×76 rounded square (radius 14), the tint as a vertical gradient base, a top-half elliptical white gloss at about 35% → 0%, a drop shadow, and a white 13 px bold label with a 1 px dark text shadow below.
+- `NavBar { title: string; back-label: string; show-back: bool; back }`: 64 px tall, with the spec gradient and an arrow-shaped back button (a pointed left edge, gradient darker than the bar, 1 px inner highlight).
+- `GroupedCell { label: string; detail: string; first: bool; last: bool }` (corners rounded only on the group's first and last cells) and `Pinstripe` (background).
+- `SlideConfirm { text: string; confirmed }`: a 64 px dark glossy track with a silver arrow knob draggable by `TouchArea`. Releasing past 85% fires `confirmed`, otherwise the knob animates back. The label shimmers through an animated gradient sweep.
+- `Segmented { options: [string]; selected: int }`, `ActionSheet { buttons: [string]; chosen(int) }`, `ProgressMeter`: a glossy blue bar with thin source segments, labelled "(conservative estimate)".
+
+- [ ] **Step 1: Font and kit.** Download Arimo from the official googlefonts release into a new empty directory, verify it is a TTF, copy only the two .ttf files and `OFL.txt` into `resources/fonts/`, and import them in Slint. If the KeyOS Slint build rejects the font import, fall back to `Theme.font-primary` and say so. Build each component.
+- [ ] **Step 2: Home.**
+  - The wallpaper is black with a very subtle radial dark-grey texture.
+  - The grid holds Glider and Shard (row 1) and How it works (the info icon).
+  - The glass dock holds Painter, Outguess, Hunt and Dice.
+  - The 12/24 `Segmented` control sits at the top under a small "Entropy Arcade" title. The tagline "Can you trust one chip?" sits under the grid.
+  - All existing routing is unchanged.
+- [ ] **Step 3: Verify in the simulator.** Take a screenshot of Home. Remember sim screenshots come out red/blue swapped; colour-correct before comparing. Compare it side by side with iPhone OS 1 home-screen reference screenshots found by web search, and list the differences you fixed.
+- [ ] **Step 4: Commit:** `"feat: iPhone OS 1 kit and Home"`
+
+### Task 17: iPhone OS 1 chrome on every screen
+
+**Files:** Modify `ui/screens/*.slint`, `ui/app.slint`, and `src/main.rs` (only for new callbacks such as the slide confirms).
+
+- [ ] **Step 1: Chrome.**
+  - Every non-Home screen gets a `NavBar`: title = screen name, back = "Home" calling `AppState.back-home()`. Remove the old standalone Home buttons, since the nav bar replaces them.
+  - Summary, Words, How-it-works and Done become pinstripe grouped tables.
+  - Summary's Generate becomes `SlideConfirm "slide to generate"`.
+  - Done's Finish becomes `SlideConfirm "slide to wipe"`.
+  - Quiz choices become an `ActionSheet`.
+  - Every Meter becomes a `ProgressMeter`.
+  - Dice keypad keys become glossy grey rounded keys.
+  - Error is an alert box (rounded dark-blue translucent panel, white bold title, glossy button).
+- [ ] **Step 2: Keep behaviour.** The wipe paths, the "(conservative estimate)" label, "App buffers wiped", capped displays, the masked rolls and the verify card stay exactly as they are. Only presentation changes.
+- [ ] **Step 3: Verify in the simulator.**
+  - Screenshot every screen (colour-corrected) against iPhone OS 1 references (Settings, Contacts, SMS, Calculator).
+  - Run a full 12-word Painter run end to end using the two slide confirms.
+  - Check that the game playfields still respond to touch under the new chrome.
+- [ ] **Step 4: Commit:** `"feat: iPhone OS 1 chrome across screens"`
+
 ---
 
 ## Time budget
