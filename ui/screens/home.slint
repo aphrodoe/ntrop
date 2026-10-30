@@ -99,8 +99,7 @@ export component HomeScreen inherits Rectangle {
     Sheet {
         width: parent.width;
         height: parent.height;
-        open: root.help;
-        dismissed => { root.help = false; }
+        open <=> root.help;
         Text { text: "How it works"; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-title; font-weight: Theme.font-weight-semibold; }
         for line in [
             "We mix your chaos with the chip's randomness: SHA-256(chip ‖ you).",

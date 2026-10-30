@@ -12,6 +12,8 @@ const MAX_GHOSTS: usize = 3;
 const SPAWN_CD_MS: i32 = 800;
 const BURST_MS: u32 = 150;
 const TAU: f32 = std::f32::consts::TAU;
+/// Game violet #8B5CFF, used for the ghost halo.
+const GHOST_RGB: (u32, u32, u32) = (0x8B, 0x5C, 0xFF);
 
 struct Ghost {
     angle: f32,
@@ -158,12 +160,20 @@ impl Hunt {
             let Some((cx, cy, hw)) = self.project(g) else { continue };
             let hh = hw * 14 / 10;
             let fade = (g.dist / 1.5).min(1.0);
-            for dy in -hh..=hh {
-                for dx in -hw..=hw {
+            let (gw, gh) = (hw * 5 / 4, hh * 5 / 4); // halo margin
+            for dy in -gh..=gh {
+                for dx in -gw..=gw {
                     let (nx, ny) = (dx as f32 / hw as f32, dy as f32 / hh as f32);
                     let inside = if ny < 0.0 { nx * nx + ny * ny <= 1.0 } else { nx.abs() <= 1.0 && ny <= 0.9 + 0.1 * (nx * 9.0).sin() };
                     let (px_x, px_y) = (cx + dx, cy + dy);
-                    if !inside || px_x < 0 || px_y < 0 || px_x >= W as i32 || px_y >= H as i32 {
+                    if px_x < 0 || px_y < 0 || px_x >= W as i32 || px_y >= H as i32 {
+                        continue;
+                    }
+                    if !inside {
+                        if nx * nx + ny * ny <= 1.5625 {
+                            let f = (fade * 90.0) as u32; // dim halo
+                            px[px_y as usize * w + px_x as usize] = Rgb8Pixel { r: (GHOST_RGB.0 * f >> 8) as u8, g: (GHOST_RGB.1 * f >> 8) as u8, b: (GHOST_RGB.2 * f >> 8) as u8 };
+                        }
                         continue;
                     }
                     let eye = ny > -0.5 && ny < -0.1 && (nx.abs() - 0.4).abs() < 0.14;
