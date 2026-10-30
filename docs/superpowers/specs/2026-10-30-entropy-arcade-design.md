@@ -83,7 +83,7 @@ texture) comes from a separate non-secret PRNG that never touches the pool.
 |---|---|---|
 | Touch move sample | 1 bit per sample that passes the health check | Raw sample (x, y, Δt µs) all hashed in. Credit is only a pessimistic min-entropy estimate. |
 | Camera frame | 4 bits per frame that passes the health check, **credited only while the user is drawing** (a touch sample in the last 250 ms), and **capped at 50% of the target** | Every frame is hashed in regardless. "Combo" mechanic: LavaRand boosts drawing but can never fill the meter on its own (no waiting-to-fill). |
-| Outguess move | `−log2(p_ub)` bits, at most 2, where `p_ub = (hits + 4) / n` over the last `n ≤ 32` moves. 0 during the first 16 moves, and 0 (source unhealthy) while `p_ub > 0.5` | The door, tap position and time are all hashed in. The +4 pseudo-hits are the safety margin. This estimate is only against *our* predictor, which is why it stays conservative and the chip is always mixed in. A random player earns about 1.4 bits per move, so 12 words take about 110 taps. |
+| Outguess move | `−log2(p_ub)` bits, at most 2, where `p_ub = (hits + 4) / n` over the last `n ≤ 32` moves and `hits` is the **best** hit count among three predictors (door history; offset from the machine's last revealed guess; win/lose state), judged in hindsight. 0 during the first 16 moves, and 0 (source unhealthy) while `p_ub > 0.5` | The door, tap position and time are all hashed in. The +4 pseudo-hits are the safety margin. The guess is revealed after each tap, so strategies keyed on it ("one below its last guess", win-stay/lose-shift) must be read too; that is what predictors 2 and 3 are for. This estimate is only against *our* predictors, which is why it stays conservative and the chip is always mixed in. A random player earns roughly 1 bit per move. |
 | Static Hunt shot | 1 bit per shot whose miss offset (Δx, Δy) passes the touch repetition and proportion tests | Look-around drags earn the normal touch credit. A bull's-eye (0, 0) or a repeated offset earns nothing. |
 | Dice roll | log2(6) ≈ 2.585 bits | Exact value, dice mode only. |
 | Hardware RNG | Not counted on the meter | Always mixed in, shown as a fixed "+ hardware 256" badge. |
@@ -222,6 +222,7 @@ Use the SDK UI kit components, with these colours set through the app theme.
 - Quiz uses 4-way multiple choice, not the system keyboard. The UI claims "App buffers wiped", not "all memory".
 - Touch credit is based on coordinates only. Δt is hashed in but not credited or tested (no hardware timestamps).
 - The Outguess predictor (order-3/2/1 context counts, Shannon "mind-reading machine" style), its 32-move window, 16-move warm-up and +4 margin.
+- Outguess runs three predictors and credits against the best one in hindsight (added after review showed a door-only predictor pays ~1.8 bits/tap to "pick one below its last guess").
 - Static Hunt credits 1 bit per healthy shot and has no cap, because it needs active play. Its look drags reuse the touch rule.
 - A flyer game was dropped: taps in one spot and one rhythm earn nearly nothing under the health tests.
 - The SDK exposes no accelerometer or microphone, so there are no tilt, shake or sound games.

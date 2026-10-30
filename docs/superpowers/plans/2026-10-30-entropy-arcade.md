@@ -330,7 +330,14 @@ for k in [3, 2, 1]:
 return most frequent door overall (0 if history is empty)
 ```
 
-Credit per move: `n = min(moves so far including this one, WINDOW)`, `hits` = hits among the last `n`, and `p_ub = min(1, (hits + MARGIN_HITS) / n)`. If `moves ≤ WARMUP`, the move earns 0 and stays healthy. Otherwise, if `p_ub > 0.5` it earns 0 and is unhealthy, else `credit_mbits = min(MAX_MBITS, floor(−log2(p_ub) × 1000))`. `read_pct = round(100 × hits / n)`.
+**Amendment (Task 9 review, 2026-10-30):** three experts, each committing a prediction from history before the door is pushed:
+- **E1 doors:** the context predictor above, over the door sequence.
+- **E2 offset:** over `r_t = (door_t − pred_{t−1}) mod 4`, where `pred` is the oracle's own revealed guess. Same k = 2/1/0 context counting over the `r` sequence (ties → lowest). Predict `(pred_{t−1} + r̂) mod 4`; with no previous guess, fall back to E1.
+- **E3 win/lose:** over `δ_t = (door_t − door_{t−1}) mod 4` with context `(hit_{t−1}, δ_{t−1})`. Predict `(door_{t−1} + δ̂) mod 4`; with fewer than 2 doors, fall back to E1.
+- The **shown/committed guess** (`Move::predicted`, `predict()`) is from whichever expert has the most hits in the last `WINDOW` moves (ties → E1, then E2, then E3).
+- **Credit uses `hits` = the max over the three experts of their own hits in the window** (best in hindsight, ≥ the shown guess's hits), not the shown guess's hits. `read_pct` uses the same `hits`.
+
+Credit per move: `n = min(moves so far including this one, WINDOW)`, `hits` = (per the amendment) the best expert's hits among the last `n`, and `p_ub = min(1, (hits + MARGIN_HITS) / n)`. If `moves ≤ WARMUP`, the move earns 0 and stays healthy. Otherwise, if `p_ub > 0.5` it earns 0 and is unhealthy, else `credit_mbits = min(MAX_MBITS, floor(−log2(p_ub) × 1000))`. `read_pct = round(100 × hits / n)`.
 
 - [ ] **Step 1: Failing tests** in `outguess.rs`. Here `prng_doors(n)` is a test helper: door `i` is the first byte of `SHA-256(i as u32 LE)`, AND 3.
 
@@ -338,7 +345,9 @@ Credit per move: `n = min(moves so far including this one, WINDOW)`, `hits` = hi
 #[test] fn oracle_reads_constant_player() { let mut o = Oracle::default(); let moves: Vec<Move> = (0..64).map(|_| o.record(2)).collect(); assert_eq!(moves.iter().map(|m| m.credit_mbits).sum::<u32>(), 0); assert!(!moves.last().unwrap().healthy); }
 #[test] fn oracle_reads_cycle() { let mut o = Oracle::default(); let moves: Vec<Move> = (0..64).map(|i| o.record((i % 4) as u8)).collect(); assert_eq!(moves[32..].iter().map(|m| m.credit_mbits).sum::<u32>(), 0); }
 #[test] fn oracle_warmup_earns_nothing() { let mut o = Oracle::default(); for d in prng_doors(16) { assert_eq!(o.record(d).credit_mbits, 0); } }
-#[test] fn oracle_credits_random_player() { let mut o = Oracle::default(); let ms: Vec<Move> = prng_doors(128).into_iter().map(|d| o.record(d)).collect(); assert!(ms.iter().map(|m| m.credit_mbits).sum::<u32>() >= 100_000); assert!(ms.iter().all(|m| m.credit_mbits <= 2000)); }
+#[test] fn oracle_credits_random_player() { let mut o = Oracle::default(); let ms: Vec<Move> = prng_doors(256).into_iter().map(|d| o.record(d)).collect(); assert!(ms.iter().map(|m| m.credit_mbits).sum::<u32>() >= 150_000); assert!(ms.iter().all(|m| m.credit_mbits <= 2000)); }
+#[test] fn oracle_reads_offset_from_last_guess() { for off in [1u8, 3] { let mut o = Oracle::default(); let ms: Vec<Move> = (0..400).map(|_| { let d = (o.predict() + off) % 4; o.record(d) }).collect(); assert_eq!(ms[64..].iter().map(|m| m.credit_mbits).sum::<u32>(), 0, "offset {off}"); } }
+#[test] fn oracle_reads_win_stay_lose_shift() { let mut o = Oracle::default(); let mut d = 0u8; let ms: Vec<Move> = (0..400).map(|_| { let m = o.record(d); if m.hit { d = (d + 1) % 4; } m }).collect(); assert_eq!(ms[64..].iter().map(|m| m.credit_mbits).sum::<u32>(), 0); }
 #[test] fn oracle_prediction_is_fixed_before_pick() { let mut o = Oracle::default(); for d in prng_doors(20) { o.record(d); } let p = o.predict(); for door in 0..4 { assert_eq!(o.clone().record(door).predicted, p); } }
 #[test] fn oracle_wipe_forgets_history() { let mut o = Oracle::default(); for _ in 0..40 { o.record(1); } o.wipe(); assert_eq!(o.predict(), 0); assert_eq!(o.record(3).credit_mbits, 0); }
 ```
