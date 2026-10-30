@@ -220,11 +220,14 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
                 show_words(&st, &s.borrow());
             }
             QuizOutcome::Done => {
-                if let Some((fp, art)) = s.borrow().fingerprint() {
+                let fp = s.borrow().fingerprint();
+                if let Some((fp, art)) = fp {
                     let hex: String = fp.iter().map(|b| format!("{b:02x}")).collect();
                     st.set_fingerprint(SharedString::from(hex.as_str()));
                     st.set_art(SharedString::from(art.as_str()));
                 }
+                // Derived display strings stay; entropy, words and pool are wiped before "App buffers wiped" shows.
+                s.borrow_mut().wipe();
                 st.set_quiz_choices(ModelRc::from(Rc::new(VecModel::<SharedString>::default())));
                 st.set_page_words(ModelRc::from(Rc::new(VecModel::<SharedString>::default())));
                 st.set_screen(Screen::Done);

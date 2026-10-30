@@ -27,5 +27,6 @@ export component SeedQrScreen inherits VerticalLayout {
     }
     Image { source: AppState.qr; image-fit: contain; image-rendering: pixelated; horizontal-stretch: 0; height: 400px; }
     Rectangle { vertical-stretch: 1; }
+    Button { text: "Home"; size: ControlSize.md; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
     Button { text: "Quiz me"; size: ControlSize.lg; full-width: true; clicked => { AppState.start-quiz(); } }
 }

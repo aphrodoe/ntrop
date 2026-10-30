@@ -25,5 +25,6 @@ export component QuizScreen inherits VerticalLayout {
         horizontal-alignment: center;
     }
     Rectangle { vertical-stretch: 1; }
+    Button { text: "Home"; size: ControlSize.md; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
     for c[i] in AppState.quiz-choices: Button { text: c; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.answer(i); } }
 }
