@@ -16,7 +16,9 @@
 - No secret (entropy, pool digest, words, seed, fingerprint inputs) may reach `log::*`, files, settings or panics. Log only counts and states.
 - Mixing must be exactly `SHA-256("entropy-arcade/v1" ‖ hw_random[32] ‖ pool_digest[32])`, truncated to 32 bytes (24 words) or 16 bytes (12 words).
 - Dice mode must be exactly `SHA-256(ASCII digits of rolls)`, truncated the same way. Minimum 50 rolls for 12 words and 99 for 24. **No hardware RNG in dice mode.**
-- Credits: 1 bit per healthy touch sample. 4 bits per healthy camera frame, only if a touch sample arrived ≤250 ms earlier, with camera total capped at `target_bits / 2`. Targets are 256 bits (24 words) or 128 bits (12 words).
+- Credits: 1 bit per healthy touch sample. 4 bits per healthy camera frame, only if a touch sample arrived ≤250 ms earlier, with camera total capped at `target_bits / 2`. Outguess: `−log2(p_ub)` per move (≤ 2 bits), `p_ub = (hits + 4) / n` over the last `n ≤ 32` moves, 0 for the first 16 moves and while `p_ub > 0.5`. Static Hunt: 1 bit per shot whose miss offset passes the touch health tests. Targets are 256 bits (24 words) or 128 bits (12 words).
+- Palette "Neon on ink": ink `#0B0A12`, surface `#15131F`, raised `#1E1B2C`, line `#2C2840`, text `#F2F0FF`, muted `#9A94B8`, touch `#00E5FF`, camera `#FF2BD6`, game `#8B5CFF`, primary/success `#C6FF3D`, warning `#FFB020`, error `#FF4D6D`.
+- Game-only randomness (ghost spawns, static texture) never comes from the pool.
 - UI copy: the wipe message reads **"App buffers wiped"**, never "all memory". Credits are labelled as **conservative estimates**.
 - Stay on `getrandom = "0.2"` (the SDK patch covers only 0.2).
 - Screen 480×800, portrait. Use `@ui/*` kit components and `Theme.*` tokens where they exist.
@@ -28,6 +30,7 @@
 3. **Leaving a screen mid-flow (back or exit) after words were shown.** Secrets must be wiped. Test: `session_wipe_clears_secrets` (Task 5).
 4. **The hardware RNG failing (`getrandom` returns Err).** Generation must stop with an error screen, never fall back to user-only entropy in Arcade mode. Test: `finish_requires_hw_random` (Task 5).
 5. **A dice roll outside 1..=6, or too few rolls.** These must be rejected and never produce a seed. Test: `dice_rejects_bad_input` (Task 4).
+6. **A predictable Outguess player, or a guess shown before the pick.** Patterned play must earn 0, and the guess must be committed before the tap. Tests: `oracle_reads_cycle`, `oracle_prediction_is_fixed_before_pick` (Task 9).
 
 ---
 
@@ -47,15 +50,18 @@ entropy-arcade/
     src/randomart.rs            # drunken-bishop art from fingerprint
     src/dice.rs                 # dice_entropy()
     src/quiz.rs                 # make_quiz()
+    src/session.rs              # Session (moved here from the app crate: host-testable)
+    src/outguess.rs             # Oracle predictor + live credit
   src/main.rs                   # app_main: wiring callbacks -> Session -> AppState
-  src/session.rs                # Session state machine, holds Zeroizing secrets, wipe()
   src/camera.rs                 # subscribe frames -> pool + preview image
   src/haptics.rs                # tiny wrapper: tick/ramp/full/alert
+  src/hunt.rs                   # Static Hunt game state + software renderer (no secrets)
   src/theme.rs                  # (scaffolded, unchanged)
   ui/app.slint                  # AppWindow: switch on AppState.screen
   ui/state.slint                # global AppState (props + callbacks), Screen enum
   ui/screens/home.slint, painter.slint, summary.slint, words.slint,
-             seedqr.slint, quiz.slint, done.slint, dice.slint, error.slint
+             seedqr.slint, quiz.slint, done.slint, dice.slint, error.slint,
+             outguess.slint, hunt.slint
   ui/widgets/meter.slint        # entropy meter with per-source segments
 ```
 
@@ -261,34 +267,120 @@ entropy-arcade/
 - Modify: `permission_templates.toml`, `app-config.toml`, `src/main.rs`, `ui/screens/painter.slint`, `ui/widgets/meter.slint`
 
 **Interfaces:**
-- Produces: `haptics::tick()`, `ramp()`, `full()`, `alert()`, all no-ops if the API connection fails.
+- Produces: `haptics::tick()`, `ramp()`, `full()`, `alert()`, all no-ops if the API connection fails. Every later game calls these on credit and on a source flipping unhealthy.
 
-- [ ] **Step 1: Permissions.** Add a `[entropy-arcade]` template with `"os/haptics"` (the `Vibrate`-family message names from `~/.foundation/sdk/current/docs/api/v1.4.0/keyos-permissions.json`), and later `"os/camera" = ["Subscribe", "SetEnabled", "NotifyVisible", "IsEnabled", "IsInUse"]`. Set `template = ["gui-app", "entropy-arcade"]`.
+- [ ] **Step 1: Permissions.** Add a `[entropy-arcade]` template with `"os/haptics"` (the `Vibrate`-family message names from `~/.foundation/sdk/current/docs/api/v1.4.0/keyos-permissions.json`). Set `template = ["gui-app", "entropy-arcade"]`. The camera entry is added by Task 12.
 - [ ] **Step 2: Haptics wrapper.** Use `haptics::use_api!` with `vibrate(HapticPattern::…)`:
   - `tick`: `SharpTickOne100`, every 8 credited bits
   - `ramp`: `TransitionRampUpShortSmoothOne0to100`, once at ≥90% full
   - `full`: `StrongClick100`
   - `alert`: `Alert750ms`, when a source flips to unhealthy
 - [ ] **Step 3: Unhealthy state.** When `touch-healthy` is false, the meter's touch segment turns red and a toast reads "Touch rejected: keep moving".
-- [ ] **Step 4: Verify in the simulator.** Hold the pointer still and drag in a perfectly straight line with a script via `passport-sim` swipe. The toast appears and the meter stops. Real scribbling resumes the climb.
+- [ ] **Step 4: Verify in the simulator.** Hold the pointer still, and drag in a perfectly straight line with a script via `passport-sim` swipe. The toast appears and the meter stops. Real scribbling resumes the climb.
 - [ ] **Step 5: Commit:** `"feat: live health rejection + haptics"`
 
-### Task 8: LavaRand (camera)
+### Task 8: "Neon on ink" theme and the game-cabinet Home
 
-**Files:** Create `src/camera.rs`. Modify `src/main.rs` and `ui/screens/painter.slint`.
+**Files:**
+- Modify: `resources/theme.json` (through `foundation theme`; see the `/foundation-cli` skill), `ui/state.slint`, `ui/app.slint`, `ui/screens/home.slint`, `ui/widgets/meter.slint`, `ui/screens/summary.slint`, `src/main.rs`
 
 **Interfaces:**
-- Consumes: `EntropyPool::add_camera_frame`, and the `AppState.camera-on` / `toggle-camera()` from Task 5.
-- Produces: `camera::start(ui: Weak<AppWindow>, session: Rc<RefCell<Session>>)`, `camera::stop()`, and `in property <image> camera-preview` on AppState.
+- Produces (AppState):
+  - `Screen` gains `outguess` and `hunt`.
+  - `start-arcade(int /*12|24*/, int /*game: 0 painter, 1 outguess, 2 hunt*/)` replaces `start-arcade(int)`.
+  - Meter: `in property <int> game-bits`, `in property <bool> game-healthy`.
+- Produces (Rust): nothing new in `Session`. The game choice is UI routing only.
 
-- [ ] **Step 1: Subscribe.** Use `camera::use_api!()`, then `slint_keyos_platform::try_subscribe_scalar::<camera_permissions::CameraPermissions, camera::messages::Subscribe>(Subscribe)` and loop over `next().await` in `spawn_local`, as in `src/theme.rs`. Read `frame.content()` as bytes: RGBA on the simulator, RGB565 on hardware (`camera::CAMERA_BYTES_PER_PX`). Call `set_enabled(true)` / `notify_visible(true)` when toggled on, and `false` when toggled off or the screen is left.
-- [ ] **Step 2: Feed and preview.** Pass each frame to `session.on_camera_frame(bytes, t_us)`. Build a 120×120 downscaled preview where each pixel is the XOR of the low 2 bits with the previous frame, scaled to neon intensity. This is the "noise" visual; the raw image is not shown.
-- [ ] **Step 3: Verify in the simulator** with the webcam. With the camera on and no touch, the meter doesn't move. Camera on while scribbling fills faster, and the camera segment stops at 50%. Covering the webcam still gives noise; freezing it (unplug, or a static virtual cam) gets it flagged.
-- [ ] **Step 4: Commit:** `"feat: LavaRand camera entropy"`
+- [ ] **Step 1: Palette.** Set the spec's "Neon on ink" values as the app theme: background `#0B0A12`, surface `#15131F`, raised `#1E1B2C`, line `#2C2840`, text `#F2F0FF`, muted `#9A94B8`, primary/success `#C6FF3D`, warning `#FFB020`, error `#FF4D6D`. Source colours that have no theme token (touch `#00E5FF`, camera `#FF2BD6`, game `#8B5CFF`) go in one Slint `global Neon` in `ui/state.slint`, used everywhere instead of literals.
+- [ ] **Step 2: Home cabinet.** Title "Entropy Arcade", tagline "Can you trust one chip?", a 12/24-word toggle (default 24), and four cards: Chaos Painter, Outguess the Machine, Static Hunt, Dice Duel. Each card has a one-line hook in its source colour. Until Tasks 9 and 10 land, the Outguess and Hunt cards route to the Painter screen.
+- [ ] **Step 3: Meter.** Three segments: touch (cyan), camera (magenta) and game (violet). The game segment shows `game-bits`. Summary gets a "Game skill" row, capped like the others so the shown total never exceeds the target.
+- [ ] **Step 4: Verify in the simulator.** Screenshot Home and Painter, and check the colours against the hex values above.
+- [ ] **Step 5: Commit:** `"feat: neon-on-ink theme and game cabinet"`
 
-### Task 9: Dice Duel
+### Task 9: Outguess the Machine
 
-**Files:** Create `ui/screens/dice.slint`. Modify `src/session.rs`, `src/main.rs` and `ui/state.slint`.
+**Files:**
+- Create: `crates/entropy-core/src/outguess.rs`, `ui/screens/outguess.slint`
+- Modify: `crates/entropy-core/src/{lib.rs,pool.rs,session.rs}`, `ui/state.slint`, `ui/app.slint`, `src/main.rs`
+
+**Interfaces:**
+- Produces (core):
+  - `pub struct Oracle` (`Default`, `Clone`, `Zeroize`). It holds the player's door history, which is secret entropy material.
+  - `Oracle::predict(&self) -> u8` returns 0..=3. It is pure, from history only.
+  - `Oracle::record(&mut self, door: u8) -> Move`. The prediction is taken from `predict()` *before* the door is pushed, so it is committed by construction.
+  - `Oracle::wipe(&mut self)`.
+  - `pub struct Move { pub predicted: u8, pub hit: bool, pub credit_mbits: u32, pub read_pct: u8, pub healthy: bool }`
+  - `EntropyPool::add_outguess(&mut self, door: u8, x: i32, y: i32, t_us: u64, credit_mbits: u32)` absorbs `TAG_OUTGUESS = 0x03` with `door ‖ x ‖ y ‖ t_us`, adds `credit_mbits` to `game_mbits`, and sets `game_ok = healthy`.
+  - `EntropyPool::game_bits(&self) -> u32` is `game_mbits / 1000`. `credited_bits()` includes it. `EntropyPool::game_healthy(&self) -> bool`.
+  - `Session::outguess_pick(&mut self, door: u8, x: i32, y: i32, t_us: u64) -> Move`
+- Produces (AppState):
+  - `callback pick-door(int, length, length)`
+  - `in property <int> last-guess` (-1 means none yet), `in property <bool> last-hit`, `in property <string> last-credit` (e.g. "+1.4 bits"), `in property <int> read-pct`
+
+Constants (in `outguess.rs`): `DOORS = 4`, `WINDOW = 32`, `WARMUP = 16`, `MARGIN_HITS = 4`, `MAX_MBITS = 2000`.
+
+Predictor (Shannon mind-reading-machine style; ties break to the lowest door):
+
+```
+for k in [3, 2, 1]:
+    if history.len() > k:
+        ctx = last k doors
+        counts[d] = how often ctx was followed by d earlier in history
+        if any count > 0: return argmax(counts)
+return most frequent door overall (0 if history is empty)
+```
+
+Credit per move: `n = min(moves so far including this one, WINDOW)`, `hits` = hits among the last `n`, and `p_ub = min(1, (hits + MARGIN_HITS) / n)`. If `moves ≤ WARMUP`, the move earns 0 and stays healthy. Otherwise, if `p_ub > 0.5` it earns 0 and is unhealthy, else `credit_mbits = min(MAX_MBITS, floor(−log2(p_ub) × 1000))`. `read_pct = round(100 × hits / n)`.
+
+- [ ] **Step 1: Failing tests** in `outguess.rs`. Here `prng_doors(n)` is a test helper: door `i` is the first byte of `SHA-256(i as u32 LE)`, AND 3.
+
+```rust
+#[test] fn oracle_reads_constant_player() { let mut o = Oracle::default(); let moves: Vec<Move> = (0..64).map(|_| o.record(2)).collect(); assert_eq!(moves.iter().map(|m| m.credit_mbits).sum::<u32>(), 0); assert!(!moves.last().unwrap().healthy); }
+#[test] fn oracle_reads_cycle() { let mut o = Oracle::default(); let moves: Vec<Move> = (0..64).map(|i| o.record((i % 4) as u8)).collect(); assert_eq!(moves[32..].iter().map(|m| m.credit_mbits).sum::<u32>(), 0); }
+#[test] fn oracle_warmup_earns_nothing() { let mut o = Oracle::default(); for d in prng_doors(16) { assert_eq!(o.record(d).credit_mbits, 0); } }
+#[test] fn oracle_credits_random_player() { let mut o = Oracle::default(); let ms: Vec<Move> = prng_doors(128).into_iter().map(|d| o.record(d)).collect(); assert!(ms.iter().map(|m| m.credit_mbits).sum::<u32>() >= 100_000); assert!(ms.iter().all(|m| m.credit_mbits <= 2000)); }
+#[test] fn oracle_prediction_is_fixed_before_pick() { let mut o = Oracle::default(); for d in prng_doors(20) { o.record(d); } let p = o.predict(); for door in 0..4 { assert_eq!(o.clone().record(door).predicted, p); } }
+#[test] fn oracle_wipe_forgets_history() { let mut o = Oracle::default(); for _ in 0..40 { o.record(1); } o.wipe(); assert_eq!(o.predict(), 0); assert_eq!(o.record(3).credit_mbits, 0); }
+```
+
+  In `pool.rs`: `game_credit_fills_meter` (64 × `add_outguess(.., 2000)` on Twelve gives `is_full()`) and `wipe_resets_game_credit`. In `session.rs`: `outguess_pick_feeds_pool` (after warm-up, a random sequence raises `pool().unwrap().game_bits()`).
+- [ ] **Step 2: Run** `cargo test -p entropy-core --lib outguess`. Expected: FAIL (`Oracle` is not defined). Implement, then run the full `cargo test -p entropy-core --lib`. Expected: PASS.
+- [ ] **Step 3: UI.** The meter sits on top, with a 2×2 grid of large doors in game violet. Each door's `TouchArea` calls `AppState.pick-door(i, abs-x, abs-y)`. **The guess is revealed only after the tap**: "Machine guessed 3 · MISS · +1.4 bits", or "READ YOU · +0" in red. A "The machine reads you N%" line follows, then Done once full (routes to Summary). Wire the Task 7 haptics: tick on credit, alert when it flips unhealthy. Never log doors, guesses or tap positions.
+- [ ] **Step 4: Verify in the simulator.** Tap door 1 twenty-five times: "reads you" climbs past 50%, the game segment stops, and the alert fires. Then tap a varied sequence: the meter climbs again. Screenshot both states.
+- [ ] **Step 5: Commit:** `"feat: Outguess the Machine"`
+
+### Task 10: Static Hunt
+
+**Files:**
+- Create: `src/hunt.rs` (game state and software renderer; nothing secret lives here), `ui/screens/hunt.slint`
+- Modify: `crates/entropy-core/src/{pool.rs,session.rs}`, `ui/state.slint`, `ui/app.slint`, `src/main.rs`
+
+**Interfaces:**
+- Produces (core):
+  - `EntropyPool::add_shot(&mut self, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult` absorbs `TAG_SHOT = 0x04` and checks the offset with its own `TouchHealth` instance (`shot_health`). `Good` adds 1000 to `game_mbits`. `Unhealthy` sets `game_ok = false`.
+  - `Session::on_shot(&mut self, miss_dx: i32, miss_dy: i32, t_us: u64) -> SampleResult`
+- Produces (app): `hunt::Hunt` with `new(seed: u32)`, `turn(dx_px: i32)`, `tick(dt_ms: u32)`, `render(&mut SharedPixelBuffer<Rgb8Pixel>)` and `tap(x: i32, y: i32) -> Option<(i32, i32)>`. `tap` returns the miss offset from the nearest on-screen ghost centre, or `None` when no ghost is on screen.
+- Produces (AppState): `in property <image> hunt-frame`, `callback hunt-press(length, length)`, `callback hunt-move(length, length)`, `callback hunt-release(length, length)`
+
+Rules: the view is 240×320, scaled 2× under the meter. A press that moves more than 8 px is a drag: it turns the view at 0.5° per px, and each move event also goes to `session.on_touch` (the normal credited touch rule). A release within 8 px of its press is a shot: `tap` → `session.on_shot`. A shot within the ghost's half-width bursts it. Up to 3 ghosts spawn at random angles, distance 8, and approach at 1 unit/s. A ghost reaching you just fades out: no game over, no lost bits. The static and the spawns come from a xorshift32 seeded once from `hw_random()`, never from the pool.
+
+- [ ] **Step 1: Renderer spike** (throwaway if it fails). In `hunt.rs`, raycast a fixed 16×16 room from its centre: one column per x, with walls textured by animated static. Drive it from a 33 ms `slint::Timer` into `hunt-frame`. Log the average render time every 100 frames, as `log::info!("screen hunt frame_ms={}", avg)` (a timing, not a secret). **Rule:** if the simulator average is ≤ 16 ms, keep first-person. Otherwise build the flat fallback, where ghosts drift across a full-screen static field with the same `tap`/`turn` API. Record the measured number and the choice in the report.
+- [ ] **Step 2: Failing tests** in `pool.rs`:
+
+```rust
+#[test] fn shot_repeated_offset_earns_once() { let mut p = EntropyPool::new(WordCount::Twelve); for i in 0..20 { p.add_shot(3, -2, i * 1000); } assert!(p.game_bits() <= 1); }
+#[test] fn shot_bullseye_earns_nothing() { let mut p = EntropyPool::new(WordCount::Twelve); for i in 0..20 { p.add_shot(0, 0, i * 1000); } assert_eq!(p.game_bits(), 0); }
+#[test] fn shots_varied_credit_one_bit_each() { let mut p = EntropyPool::new(WordCount::Twelve); for i in 0..10i32 { p.add_shot(i * 3 - 7, 11 - i * 5, i as u64 * 1000); } assert_eq!(p.game_bits(), 10); }
+```
+
+  Run `cargo test -p entropy-core --lib shot`. Expected: FAIL. Implement, then run the full suite. Expected: PASS.
+- [ ] **Step 3: Game.** Ghosts are violet noise billboards. Add a crosshair, a burst flash on hit, a "+1 bit" pop on a credited shot, Task 7 haptics, and Done once full (routes to Summary). Never log tap positions or offsets.
+- [ ] **Step 4: Verify in the simulator.** Drag to turn, tap ghosts to burst them, and watch the meter rise. Screenshot. Tap the same spot repeatedly with no ghost moving: it earns no shot credit.
+- [ ] **Step 5: Commit:** `"feat: Static Hunt"`
+
+### Task 11: Dice Duel
+
+**Files:** Create `ui/screens/dice.slint`. Modify `crates/entropy-core/src/session.rs`, `src/main.rs` and `ui/state.slint`.
 
 **Interfaces:**
 - Consumes: `dice_entropy`, `min_rolls`, and the Words → Done flow from Task 6.
@@ -301,30 +393,44 @@ entropy-arcade/
 - [ ] **Step 4: Verify in the simulator.** Tap the 50-roll vector, then confirm that `echo -n 12345612345612345612345612345612345612345612345612 | sha256sum` starts with `ee72ae915a4e6ea7ccbeb8e5e5eecef2`, matching what the app used.
 - [ ] **Step 5: Commit:** `"feat: verifiable Dice Duel mode"`
 
-### Task 10: Polish and demo
+### Task 12: LavaRand (camera) — cut first if time runs short
 
-**Files:** Modify `resources/theme.json` (via `foundation theme`), the `ui/screens/*`, `resources/icon.svg` and `resources/icon-dark.svg`.
+**Files:** Create `src/camera.rs`. Modify `src/main.rs`, `ui/screens/painter.slint`, `permission_templates.toml`.
 
-- [ ] **Step 1: Arcade theme.** Near-black background, cyan `#00E5FF` and magenta `#FF2BD6` accents, glow on trail dots (layered rounded rectangles with decreasing opacity), animated meter width (`animate width { duration: 120ms; }`).
-- [ ] **Step 2: Home screen.** Add a "How it works" `Sheet` with 4 short lines:
+**Interfaces:**
+- Consumes: `EntropyPool::add_camera_frame`, and the `AppState.camera-on` / `toggle-camera()` from Task 5.
+- Produces: `camera::start(ui: Weak<AppWindow>, session: Rc<RefCell<Session>>)`, `camera::stop()`, `Session::on_camera_frame(&mut self, frame: &[u8], t_us: u64) -> SampleResult`, and `in property <image> camera-preview` on AppState.
+
+- [ ] **Step 1: Permission and subscribe.** Add `"os/camera" = ["Subscribe", "SetEnabled", "NotifyVisible", "IsEnabled", "IsInUse"]` to the `[entropy-arcade]` template. Use `camera::use_api!()`, then `slint_keyos_platform::try_subscribe_scalar::<camera_permissions::CameraPermissions, camera::messages::Subscribe>(Subscribe)` and loop over `next().await` in `spawn_local`, as in `src/theme.rs`. Read `frame.content()` as bytes: RGBA on the simulator, RGB565 on hardware (`camera::CAMERA_BYTES_PER_PX`). Call `set_enabled(true)` / `notify_visible(true)` when toggled on, and `false` when toggled off or the screen is left.
+- [ ] **Step 2: Feed and preview.** Pass each frame to `session.on_camera_frame(bytes, t_us)`. Build a 120×120 downscaled preview where each pixel is the XOR of the low 2 bits with the previous frame, scaled to magenta intensity. This is the "noise" visual; the raw image is not shown.
+- [ ] **Step 3: Verify in the simulator** with the webcam. With the camera on and no touch, the meter doesn't move. Camera on while scribbling fills faster, and the camera segment stops at 50%. Covering the webcam still gives noise; freezing it gets it flagged.
+- [ ] **Step 4: Commit:** `"feat: LavaRand camera entropy"`
+
+### Task 13: Polish and demo
+
+**Files:** Modify `ui/screens/*`, `ui/widgets/meter.slint`, `resources/icon.svg` and `resources/icon-dark.svg`.
+
+- [ ] **Step 1: Glow and motion.** Glow on trail dots, doors and ghosts (2–3 layered rounded rectangles with decreasing opacity), and animated meter width (`animate width { duration: 120ms; }`).
+- [ ] **Step 2: Home screen.** Add a "How it works" `Sheet` with these 5 short lines:
   - "We mix your chaos with the chip's randomness: SHA-256(chip ‖ you)."
-  - "Even if you scribble badly, it's never weaker than the chip."
+  - "Even if you play badly, it's never weaker than the chip."
   - "Credits are conservative estimates; stale input is rejected live."
+  - "Outguess and Static Hunt only pay for what the machine can't predict."
   - "Dice Duel uses only your dice, so you can verify it on a laptop."
-- [ ] **Step 3: App icon.** A neon die with a spark.
-- [ ] **Step 4: Rehearse the demo** in `foundation sim` using the built-in recorder. Script, about 90 s:
+- [ ] **Step 3: App icon.** A neon die with a spark, on ink, in cyan and lime.
+- [ ] **Step 4: Rehearse the demo** in `foundation sim` using the built-in recorder. Script, about 2 min:
   1. The hook: "Can you trust one chip?"
-  2. Scribble while the meter climbs and haptic ticks fire.
-  3. Hold still and get rejected.
-  4. Switch on LavaRand for the combo.
+  2. Scribble while the meter climbs and haptic ticks fire. Hold still and get rejected.
+  3. Outguess: a lazy pattern gets read ("reads you 70%"), then real play pays.
+  4. Static Hunt: a few blasts.
   5. Fill the meter, then show the summary, words, SeedQR, quiz, and the fingerprint with its art.
   6. Dice Duel with the laptop check.
-- [ ] **Step 5: Final check.** Run `cargo test -p entropy-core` (all pass), then `grep -rn "log::" src | grep -v -E "info!\(\"(screen|bits|health)"` and review that nothing secret is logged.
-- [ ] **Step 6: Commit and submit.** Commit with `"feat: arcade polish"`, then email the video to ken@foundation.xyz with the subject `Bitmela App: Entropy Arcade` before 10:00.
+- [ ] **Step 5: Final check.** Run `cargo test -p entropy-core --lib` (all pass), then `grep -rn "log::" src | grep -v -E "info!\(\"(screen|bits|health)"` and review that nothing secret is logged.
+- [ ] **Step 6: Commit** with `"feat: arcade polish"`. The submission email is sent by the user (ledger Ruling D).
 
 ---
 
 ## Time budget
 
 - **Event (70 min):** Tasks 1–3, plus starting Task 5. Tasks 1 and 5 alone give a demoable core.
-- **Overnight:** Tasks 5–10, in that order. If time runs short, cut from the bottom: Task 9 before Task 8, and polish last.
+- **Overnight:** Tasks 5–13, in that order. If time runs short, cut from the bottom: LavaRand (12) first, then fall back to flat Static Hunt, then polish.
