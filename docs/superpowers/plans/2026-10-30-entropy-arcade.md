@@ -460,9 +460,9 @@ Rules: the view is 240×320, scaled 2× under the meter. A press that moves more
     - Else `p̂ = max_count / n`, `p_u = min(1, p̂ + 2.576·√(p̂(1−p̂)/(n−1)))`, and credit `= min(cap, floor(−log2(p_u)·1000))`, healthy.
 - Produces (core, `glide.rs`):
   - `pub struct GlideTimer` (`Zeroize`) with `tap(&mut self, t_us: u64) -> Option<u16>`.
-  - It keeps the last 8 intervals.
-  - It returns `None` on the first tap, until 8 intervals exist, and after a pause (interval > 1.5 s, which also resets the baseline).
-  - Otherwise `r = interval − median(last 8 intervals before this one)` in µs, and the symbol is `clamp(r / 4000, −16, 16) + 16` (0..=32).
+  - It keeps the last 16 intervals.
+  - It returns `None` on the first tap, until 16 intervals exist, and after a pause (interval > 1.5 s, which also resets the baseline).
+  - Otherwise `r = interval − median(last 16 intervals before this one)` in µs, and the symbol is `clamp(r / 4000, −16, 16) + 16` (0..=32).
 - Produces (core, pool/session):
   - `EntropyPool::add_glide(&mut self, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool)` absorbs `TAG_GLIDE = 0x05` with `x ‖ y ‖ t_us`, adds to `game_mbits`, and sets `game_ok`.
   - Refactor `add_outguess` and `add_glide` through one private helper; the absorb format is unchanged.
@@ -492,7 +492,7 @@ Course rules (`src/glide.rs`):
 #[test] fn glide_steady_drift_earns_nothing() { /* intervals 400 ms + 2 ms per tap (deterministic ramp), 120 taps → total 0 */ }
 #[test] fn glide_frame_quantised_jitter_is_bounded() { /* intervals 400 ms + k·16_667 µs, k ∈ {−1,0,1} from a SHA-256 counter, 200 taps → every credit ≤ 1585 mbits (log2 3: three possible values can't carry more) and total > 0 */ }
 #[test] fn glide_human_jitter_earns() { /* intervals 400 ms + (sum of 4 uniform SHA-256 bytes − 510)·80 µs (≈ ±20 ms bell), 200 taps → total ≥ 100_000 mbits */ }
-#[test] fn glide_pause_resets_baseline() { /* 20 steady taps, a 3 s pause, then the next 8 taps return no symbol (credit 0, healthy) */ }
+#[test] fn glide_pause_resets_baseline() { /* 20 steady taps, a 3 s pause, then the next 16 taps return no symbol (credit 0, healthy) */ }
 ```
 
   Plus `wipe_resets_glide` in `session.rs`.

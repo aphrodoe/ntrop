@@ -76,7 +76,7 @@ replace the Prime's own master seed.
 12. **Glitch Glider (added 2026-10-31).** An original one-tap flyer: a spark glides
     through a static tunnel and each tap pulses it upward. The randomness is **not** the
     time between taps (the course sets the rhythm) but the player's **timing error**:
-    each interval minus the median of the previous 8. The course has **constant**
+    each interval minus the median of the previous 16 (a long baseline, so the symbol reflects the new tap and does not re-count earlier taps' randomness). The course has **constant**
     obstacle spacing, gap height and speed, so the ideal rhythm never changes and the
     error is purely human. Varying the course from a PRNG would leak game randomness into
     the error, the same flaw found in Static Hunt's ghost churn. Visual variety comes from
@@ -249,7 +249,7 @@ Use the SDK UI kit components, with these colours set through the app theme.
 - Static Hunt credits 1 bit per healthy shot and has no cap, because it needs active play. Its look drags reuse the touch rule.
 - A flyer game was dropped: taps in one spot and one rhythm earn nearly nothing under the health tests.
 - The SDK exposes no accelerometer or microphone, so there are no tilt, shake or sound games.
-- The MCV estimator (NIST SP 800-90B §6.3.1) with a 99% upper bound, 64-symbol window, 4 ms timing bins, the median-of-8 rhythm baseline, and the 5-repeat health rule.
+- The MCV estimator (NIST SP 800-90B §6.3.1) with a 99% upper bound, 64-symbol window, 4 ms timing bins, the median-of-16 rhythm baseline (8 was shown to re-count earlier taps: 1.67 bits/tap from a 3-valued input), and the 5-repeat health rule.
 - Glitch Glider's course is constant (no random geometry), so its timing error cannot carry game randomness.
 - Shard Stack's heuristic weights: aggregate height −0.51, lines +0.76, holes −0.36, bumpiness −0.18.
 
