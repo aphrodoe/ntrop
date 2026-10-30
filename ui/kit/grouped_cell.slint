@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: MIT
+import { Ios } from "../state.slint";
+
+// One row of a grouped table. The grey outer rect shows through as the group border and
+// the 1 px separator under each row; only the group's first and last rows round their corners.
+export component GroupedCell inherits Rectangle {
+    in property <string> label;
+    in property <string> detail;
+    in property <bool> first: false;
+    in property <bool> last: false;
+    callback clicked();
+    height: 64px + (root.first ? 1px : 0px);
+    background: Ios.separator;
+    border-top-left-radius: root.first ? 10px : 0;
+    border-top-right-radius: root.first ? 10px : 0;
+    border-bottom-left-radius: root.last ? 10px : 0;
+    border-bottom-right-radius: root.last ? 10px : 0;
+    Rectangle {
+        x: 1px; y: root.first ? 1px : 0; width: parent.width - 2px; height: 63px;
+        background: ta.pressed ? #2E6BE6 : #FFFFFF;
+        border-top-left-radius: root.first ? 9px : 0;
+        border-top-right-radius: root.first ? 9px : 0;
+        border-bottom-left-radius: root.last ? 9px : 0;
+        border-bottom-right-radius: root.last ? 9px : 0;
+        HorizontalLayout {
+            padding-left: 16px; padding-right: 16px; spacing: 12px;
+            Text { vertical-alignment: center; text: root.label; color: ta.pressed ? #FFFFFF : Ios.label; font-family: Ios.font; font-size: 20px; font-weight: 700; overflow: elide; }
+            Text { horizontal-stretch: 1; vertical-alignment: center; horizontal-alignment: right; text: root.detail; color: ta.pressed ? #FFFFFF : Ios.detail; font-family: Ios.font; font-size: 19px; overflow: elide; }
+        }
+        ta := TouchArea { clicked => { root.clicked(); } }
+    }
+    @children
+}

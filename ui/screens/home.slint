@@ -1,111 +1,52 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
+import { Theme } from "@ui/theme.slint";
 import { Sheet } from "@ui/sheet.slint";
-import { AppState, Neon } from "../state.slint";
+import { AppState, Ios } from "../state.slint";
+import { GlossyIcon } from "../kit/glossy_icon.slint";
+import { Segmented } from "../kit/segmented.slint";
 
-component GameCard inherits Rectangle {
-    in property <string> title;
-    in property <string> hook;
-    in property <color> accent;
-    callback clicked();
-    min-height: 96px;
-    border-radius: Theme.radius-md;
-    background: Theme.palette-surface;
-    border-width: 2px;
-    border-color: ta.pressed ? root.accent : Neon.line;
-    HorizontalLayout {
-        padding: Theme.spacing-md;
-        spacing: Theme.spacing-md;
-        VerticalLayout {
-            alignment: center;
-            spacing: Theme.spacing-xs;
-            Text {
-                text: root.title;
-                color: Theme.palette-foreground;
-                font-family: Theme.font-primary;
-                font-size: Theme.font-size-body;
-                font-weight: Theme.font-weight-semibold;
-            }
-            Text {
-                text: root.hook;
-                color: root.accent;
-                font-family: Theme.font-primary;
-                font-size: Theme.font-size-label;
-                wrap: word-wrap;
-            }
-        }
-    }
-    ta := TouchArea { clicked => { root.clicked(); } }
-}
-
-component WordToggle inherits Rectangle {
-    in property <int> value;
-    in property <int> option;
-    callback picked();
-    horizontal-stretch: 1;
-    height: 48px;
-    border-radius: 24px;
-    background: root.value == root.option ? Theme.palette-primary : Neon.raised;
-    Text {
-        text: root.option + " words";
-        color: root.value == root.option ? Theme.palette-background : Theme.palette-muted;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        font-weight: Theme.font-weight-semibold;
-    }
-    TouchArea { clicked => { root.picked(); } }
-}
-
+// iPhone OS 1 homage: a 4-column icon grid on black and a 4-slot dock.
 export component HomeScreen inherits Rectangle {
-    property <int> words: 24;
+    property <int> words: seg.selected == 0 ? 12 : 24;
     property <bool> help: false;
-    VerticalLayout {
-    width: parent.width;
-    height: parent.height;
-    padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 2;
-    spacing: Theme.spacing-md;
+    background: #000000;
+
+    Rectangle { background: @radial-gradient(circle, #121212 0%, #060606 55%, #000000 100%); }
 
     Text {
-        text: "Entropy Arcade";
-        color: Theme.palette-primary;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-title;
-        font-weight: Theme.font-weight-semibold;
-        horizontal-alignment: center;
+        y: 48px; width: root.width; horizontal-alignment: center;
+        text: "Entropy Arcade"; color: #B8B8B8;
+        font-family: Ios.font; font-size: 15px; font-weight: 700;
     }
+    seg := Segmented {
+        x: (root.width - 260px) / 2; y: 74px; width: 260px;
+        options: ["12 words", "24 words"];
+        selected: 1;
+    }
+
+    GlossyIcon { x: 5px; y: 142px; icon: @image-url("../../resources/icons/spark.svg"); label: "Glider"; tint: #2A86DD; clicked => { AppState.start-arcade(root.words, 3); } }
+    GlossyIcon { x: 125px; y: 142px; icon: @image-url("../../resources/icons/shard.svg"); label: "Shard"; tint: #138C86; clicked => { AppState.start-arcade(root.words, 4); } }
+    GlossyIcon { x: 245px; y: 142px; icon: @image-url("../../resources/icons/info.svg"); label: "How it works"; tint: #6F7D91; clicked => { root.help = true; } }
+
     Text {
-        text: "Can you trust one chip?";
-        color: Theme.palette-muted;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
+        y: 262px; width: root.width; horizontal-alignment: center;
+        text: "Can you trust one chip?"; color: #8C8C8C;
+        font-family: Ios.font; font-size: 16px;
     }
-    HorizontalLayout {
-        spacing: Theme.spacing-sm;
-        WordToggle { value: root.words; option: 12; picked => { root.words = 12; } }
-        WordToggle { value: root.words; option: 24; picked => { root.words = 24; } }
+
+    dock := Rectangle {
+        y: root.height - self.height; height: 116px;
+        // metal mesh shelf with a solid label band, as on the 2007 dock
+        Image { y: 0; width: parent.width; height: 90px; source: @image-url("../../resources/icons/dock-mesh.svg"); }
+        Rectangle { y: 90px; height: 26px; background: @linear-gradient(180deg, #5E6064 0%, #75777B 30%, #86888C 100%); }
+        Rectangle { y: 90px; height: 1px; background: #3A3C40; }
+        GlossyIcon { x: 5px; y: 13px; icon: @image-url("../../resources/icons/paintbrush.svg"); label: "Painter"; tint: #E8771A; clicked => { AppState.start-arcade(root.words, 0); } }
+        GlossyIcon { x: 125px; y: 13px; icon: @image-url("../../resources/icons/doors.svg"); label: "Outguess"; tint: #6A46D6; clicked => { AppState.start-arcade(root.words, 1); } }
+        GlossyIcon { x: 245px; y: 13px; icon: @image-url("../../resources/icons/ghost.svg"); label: "Hunt"; tint: #2F9A45; clicked => { AppState.start-arcade(root.words, 2); } }
+        GlossyIcon { x: 365px; y: 13px; icon: @image-url("../../resources/icons/die.svg"); label: "Dice"; tint: #C42A2A; clicked => { AppState.start-dice(root.words); } }
     }
-    GridLayout {
-        spacing: Theme.spacing-sm;
-        Row {
-            GameCard { title: "Chaos Painter"; hook: "Scribble. Your hand is the noise."; accent: Neon.touch; clicked => { AppState.start-arcade(root.words, 0); } }
-            GameCard { title: "Outguess"; hook: "Be less predictable than a bot."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 1); } }
-        }
-        Row {
-            GameCard { title: "Static Hunt"; hook: "Blast ghosts. Misses are dice."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 2); } }
-            GameCard { title: "Glitch Glider"; hook: "Tap to fly. Your timing wobble is the noise."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 3); } }
-        }
-        Row {
-            GameCard { title: "Shard Stack"; hook: "Stack shards. Surprise the solver."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 4); } }
-            GameCard { title: "Dice Duel"; hook: "Real dice. No chip."; accent: Theme.palette-foreground; clicked => { AppState.start-dice(root.words); } }
-        }
-    }
-    Rectangle { vertical-stretch: 1; }
-    Button { text: "How it works"; variant: ButtonVariant.ghost; clicked => { root.help = true; } }
-    }
+
     Sheet {
         width: parent.width;
         height: parent.height;

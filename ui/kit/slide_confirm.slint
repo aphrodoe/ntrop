@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: MIT
+import { Ios } from "../state.slint";
+
+// Dark glossy track with a silver knob. Releasing past 85% fires `confirmed`; otherwise the knob slides back.
+export component SlideConfirm inherits Rectangle {
+    in property <string> text;
+    callback confirmed();
+    height: 64px;
+    property <length> drag: 0;
+    property <length> max-drag: self.width - knob.width - 8px;
+    property <float> phase: Math.mod(animation-tick() / 1ms, 2600) / 2600;
+
+    Image { width: root.width; height: 64px; source: @image-url("../../resources/icons/track.svg", nine-slice(16)); }
+
+    // Label: grey text with a moving bright band (two nested clipped copies) for the shimmer.
+    area := Rectangle {
+        x: knob.width + 8px; width: root.width - self.x - 8px;
+        opacity: max(0, 1 - 2 * root.drag / root.max-drag);
+        Text { width: parent.width; height: parent.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; color: #7A7A7A; font-family: Ios.font; font-size: 22px; }
+        for band[i] in [{ w: 90px, c: #B4B4B4 }, { w: 40px, c: #FFFFFF }]: Rectangle {
+            width: band.w;
+            x: (root.phase * 1.6 - 0.3) * area.width - self.width / 2;
+            clip: true;
+            Text { x: -parent.x; width: area.width; height: area.height; horizontal-alignment: center; vertical-alignment: center; text: root.text; color: band.c; font-family: Ios.font; font-size: 22px; }
+        }
+    }
+
+    knob := Rectangle {
+        x: 4px + root.drag;
+        y: 4px; width: 84px; height: 56px;
+        animate x { duration: ta.pressed ? 0ms : 220ms; easing: ease-out; }
+        Image { width: 84px; height: 56px; source: @image-url("../../resources/icons/knob.svg"); }
+        ta := TouchArea {
+            moved => { root.drag = max(0, min(root.max-drag, root.drag + self.mouse-x - self.pressed-x)); }
+            pointer-event(e) => {
+                if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
+                    if root.drag >= root.max-drag * 0.85 { root.confirmed(); }
+                    root.drag = 0;
+                }
+            }
+        }
+    }
+}

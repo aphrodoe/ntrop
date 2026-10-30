@@ -1,47 +1,21 @@
 // SPDX-License-Identifier: MIT
 
 import { Theme } from "@ui/theme.slint";
-import { AppState, Neon } from "../state.slint";
+import { AppState } from "../state.slint";
+import { ProgressMeter } from "../kit/progress_meter.slint";
 
 export component Meter inherits VerticalLayout {
     spacing: Theme.spacing-sm;
-    property <int> tgt: max(AppState.target-bits, 1);
-    property <int> t: min(AppState.touch-bits, AppState.target-bits);
-    property <int> c: min(AppState.camera-bits, AppState.target-bits - root.t);
-    property <int> g: min(AppState.game-bits, AppState.target-bits - root.t - root.c);
-    property <int> total: root.t + root.c + root.g;
-
-    // Segmented bar: touch (cyan), camera (magenta), game (violet); a segment turns error-red while unhealthy.
-    Rectangle {
-        height: 12px;
-        border-radius: 6px;
-        background: Neon.line;
-        clip: true;
-        Rectangle {
-            x: 0px;
-            width: parent.width * root.t / root.tgt;
-            animate width { duration: 120ms; }
-            background: AppState.touch-healthy ? Neon.touch : Theme.palette-danger;
-        }
-        Rectangle {
-            x: parent.width * root.t / root.tgt;
-            width: parent.width * root.c / root.tgt;
-            animate x, width { duration: 120ms; }
-            background: AppState.camera-healthy ? Neon.camera : Theme.palette-danger;
-        }
-        Rectangle {
-            x: parent.width * (root.t + root.c) / root.tgt;
-            width: parent.width * root.g / root.tgt;
-            animate x, width { duration: 120ms; }
-            background: AppState.game-healthy ? Neon.game : Theme.palette-danger;
-        }
-    }
-    Text {
-        text: root.total + " / " + AppState.target-bits + " bits (conservative estimate)";
-        color: root.total >= AppState.target-bits ? Theme.palette-primary : Theme.palette-muted;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-label;
-        horizontal-alignment: center;
+    ProgressMeter {
+        target: AppState.target-bits;
+        touch-bits: AppState.touch-bits;
+        camera-bits: AppState.camera-bits;
+        game-bits: AppState.game-bits;
+        touch-ok: AppState.touch-healthy;
+        camera-ok: AppState.camera-healthy;
+        game-ok: AppState.game-healthy;
+        label-color: Theme.palette-muted;
+        full-color: Theme.palette-primary;
     }
     Text {
         visible: !AppState.touch-healthy || (AppState.camera-on && !AppState.camera-healthy);

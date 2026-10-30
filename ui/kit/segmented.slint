@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: MIT
+import { Ios } from "../state.slint";
+
+// Bordered glossy segmented control; the selected segment turns blue. Each segment is a rounded
+// nine-slice image overhanging a plain rectangular clip, so only the control's outer ends are round.
+export component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in-out property <int> selected;
+    callback changed(int);
+    height: 44px;
+    border-radius: 9px;
+    background: #6A6A6A;
+    HorizontalLayout {
+        padding: 1px;
+        spacing: 1px;
+        for o[i] in root.options: Rectangle {
+            property <bool> on: i == root.selected;
+            property <length> lpad: i == 0 ? 0 : 10px;
+            property <length> rpad: i == root.options.length - 1 ? 0 : 10px;
+            horizontal-stretch: 1;
+            clip: true;
+            Image {
+                x: -parent.lpad; width: parent.width + parent.lpad + parent.rpad; height: 42px;
+                source: on ? @image-url("../../resources/icons/seg-blue.svg", nine-slice(8)) : @image-url("../../resources/icons/seg-white.svg", nine-slice(8));
+            }
+            Text { y: (parent.height - self.height) / 2 + (on ? -1px : 1px); text: o; color: on ? #00000059 : #FFFFFF; font-family: Ios.font; font-size: 17px; font-weight: 700; }
+            Text { text: o; color: on ? #FFFFFF : #3C3C3C; font-family: Ios.font; font-size: 17px; font-weight: 700; }
+            TouchArea { clicked => { root.selected = i; root.changed(i); } }
+        }
+    }
+}

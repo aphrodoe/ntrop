@@ -1,0 +1,62 @@
+// SPDX-License-Identifier: MIT
+import { Ios, Neon } from "../state.slint";
+
+// Glossy blue progress bar with a thin strip of source-coloured segments underneath.
+export component ProgressMeter inherits VerticalLayout {
+    in property <int> target: 128;
+    in property <int> touch-bits;
+    in property <int> camera-bits;
+    in property <int> game-bits;
+    in property <bool> touch-ok: true;
+    in property <bool> camera-ok: true;
+    in property <bool> game-ok: true;
+    in property <color> label-color: #FFFFFF;
+    in property <color> full-color: #FFFFFF;
+    property <int> tgt: max(root.target, 1);
+    property <int> t: min(root.touch-bits, root.target);
+    property <int> c: min(root.camera-bits, root.target - root.t);
+    property <int> g: min(root.game-bits, root.target - root.t - root.c);
+    property <int> total: root.t + root.c + root.g;
+    spacing: 6px;
+
+    Rectangle {
+        height: 20px;
+        Image { width: parent.width; height: 20px; source: @image-url("../../resources/icons/progress-track.svg", nine-slice(9 10 9 10)); }
+        Image {
+            x: 1px; y: 1px; height: 18px;
+            width: root.total == 0 ? 0 : max(18px, (parent.width - 2px) * root.total / root.tgt);
+            animate width { duration: 120ms; }
+            source: @image-url("../../resources/icons/progress-fill.svg", nine-slice(8 9 8 9));
+        }
+    }
+    // Source segments: touch, camera, game; a segment turns red while its source is unhealthy.
+    Rectangle {
+        height: 5px;
+        border-radius: 2.5px;
+        background: #2A2A2A;
+        clip: true;
+        Rectangle {
+            x: 0; width: parent.width * root.t / root.tgt;
+            animate width { duration: 120ms; }
+            background: root.touch-ok ? Neon.touch : #FF4D6D;
+        }
+        Rectangle {
+            x: parent.width * root.t / root.tgt; width: parent.width * root.c / root.tgt;
+            animate x, width { duration: 120ms; }
+            background: root.camera-ok ? Neon.camera : #FF4D6D;
+        }
+        Rectangle {
+            x: parent.width * (root.t + root.c) / root.tgt; width: parent.width * root.g / root.tgt;
+            animate x, width { duration: 120ms; }
+            background: root.game-ok ? Neon.game : #FF4D6D;
+        }
+    }
+    Text {
+        text: root.total + " / " + root.target + " bits (conservative estimate)";
+        color: root.total >= root.target ? root.full-color : root.label-color;
+        font-family: Ios.font;
+        font-size: 14px;
+        font-weight: 700;
+        horizontal-alignment: center;
+    }
+}

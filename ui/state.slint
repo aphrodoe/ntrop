@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT
 
+import "../resources/fonts/Arimo-Regular.ttf";
+import "../resources/fonts/Arimo-Bold.ttf";
+
 export enum Screen { home, painter, outguess, hunt, glide, shard, summary, words, seedqr, quiz, done, dice, error }
 
 // Colours with no theme token: source identities plus the ink-palette extras.
@@ -10,6 +13,22 @@ export global Neon {
     out property <color> raised: #1E1B2C;
     out property <color> line: #2C2840;
     out property <color> warning: #FFB020;
+}
+
+// iPhone OS 1 homage chrome (spec "Visual direction (superseded 2026-10-31)").
+export global Ios {
+    out property <string> font: "Arimo";
+    out property <color> bar-top: #B0BCCD;
+    out property <color> bar-bottom: #6D84A2;
+    out property <color> bar-line: #2D3642;
+    out property <color> stripe-bg: #C5CCD4;
+    out property <color> stripe: #CBD2D8;
+    out property <color> separator: #ABABAB;
+    out property <color> detail: #385487;
+    out property <color> label: #000000;
+    out property <color> blue-top: #8EB4F5;
+    out property <color> blue-mid: #4A84E8;
+    out property <color> blue-bottom: #1D5ED6;
 }
 
 export struct Pillar { x: length, gap-y: length }

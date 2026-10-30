@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: MIT
+import { Ios } from "../state.slint";
+
+// Grouped-table background: #C5CCD4 with 1 px #CBD2D8 vertical stripes every 4 px.
+export component Pinstripe inherits Rectangle {
+    background: Ios.stripe-bg;
+    for i in Math.ceil(root.width / 4px): Rectangle { x: i * 4px; y: 0; width: 1px; height: root.height; background: Ios.stripe; }
+    @children
+}
