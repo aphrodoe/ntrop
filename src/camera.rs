@@ -60,25 +60,37 @@ fn fail(ui: &Weak<AppWindow>) {
     }
 }
 
-/// Starts the camera and the frame task. Returns false (camera stays off) if the API is unreachable;
-/// a later subscription failure turns the toggle back off with a note.
+/// Starts the frame task. Returns false (camera stays off) if the API is unreachable;
+/// a subscription failure turns the toggle back off with a note.
 pub fn start(ui: Weak<AppWindow>, session: Rc<RefCell<Session>>, t0: Instant, fb: Rc<RefCell<Feedback>>) -> bool {
     stop();
-    // SetEnabled/NotifyVisible are Foundation-only (AccessDenied for third-party apps), so the system
-    // owns the camera power; we only subscribe, and bail out if it is off or unreachable.
-    if !with_api(|a| a.is_enabled()).unwrap_or(false) {
+    // SetEnabled/NotifyVisible are Foundation-only; the system owns camera power. Subscribe directly.
+    // If the system camera reports off we keep the subscription and hint, since frames start when it is switched on.
+    let Some(enabled) = with_api(|a| a.is_enabled()) else {
+        log::warn!("camera: api unreachable");
         return false;
+    };
+    if !enabled {
+        if let Some(ui) = ui.upgrade() {
+            ui.global::<AppState>().set_camera_note(SharedString::from("Turn on the camera in Control Center"));
+        }
     }
     let sub = slint_keyos_platform::try_subscribe_scalar::<camera_permissions::CameraPermissions, camera::messages::Subscribe>(
         camera::messages::Subscribe,
     );
     let task = slint_keyos_platform::spawn_local(async move {
-        let Ok(mut frames) = sub.await else {
-            return fail(&ui);
+        let mut frames = match sub.await {
+            Ok(f) => f,
+            Err(e) => {
+                log::warn!("camera: subscribe failed: {e:?}");
+                return fail(&ui);
+            }
         };
+        log::info!("camera: subscribed");
         while let Some(frame) = frames.next().await {
             let Some(w) = ui.upgrade() else { break };
             let st = w.global::<AppState>();
+            st.set_camera_note(SharedString::new());
             if !st.get_camera_on() {
                 continue;
             }

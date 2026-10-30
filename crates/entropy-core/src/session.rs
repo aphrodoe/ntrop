@@ -221,6 +221,36 @@ impl Default for Session {
 mod tests {
     use super::*;
     #[test] fn camera_frame_without_pool_is_uncredited() { let mut s = Session::new(); assert_eq!(s.on_camera_frame(&[1, 2, 3], 0), SampleResult::Uncredited); }
+    fn frame(seed: u32) -> Vec<u8> {
+        let mut x = seed.wrapping_mul(2_654_435_761).wrapping_add(1);
+        (0..4096).map(|_| { x = x.wrapping_mul(1_103_515_245).wrapping_add(12_345); (x >> 16) as u8 }).collect()
+    }
+    #[test] fn camera_frame_after_touch_credits_4_bits() {
+        let mut s = Session::new(); s.start_arcade(WordCount::TwentyFour);
+        s.on_camera_frame(&frame(1), 0); // health check needs a previous frame
+        s.on_touch(5, 5, 90_000); s.on_touch(9, 12, 100_000);
+        assert_eq!(s.on_camera_frame(&frame(2), 300_000), SampleResult::Credited(4));
+        assert_eq!(s.pool().unwrap().camera_bits(), 4);
+    }
+    #[test] fn camera_frame_without_recent_touch_credits_nothing() {
+        let mut s = Session::new(); s.start_arcade(WordCount::TwentyFour);
+        assert_eq!(s.on_camera_frame(&frame(1), 0), SampleResult::Uncredited);
+        s.on_touch(5, 5, 90_000); s.on_touch(9, 12, 100_000);
+        assert_eq!(s.on_camera_frame(&frame(2), 400_000), SampleResult::Uncredited); // 300 ms: stale touch
+        assert_eq!(s.pool().unwrap().camera_bits(), 0);
+    }
+    #[test] fn camera_credit_caps_at_half_target() {
+        let mut s = Session::new(); s.start_arcade(WordCount::Twelve);
+        for i in 0..200u32 {
+            let t = i as u64 * 20_000;
+            for k in 0..3u32 { // varied touches so the touch health check passes
+                let mut h = (i * 3 + k).wrapping_mul(0x9e37_79b1); h ^= h >> 15; h = h.wrapping_mul(0x85eb_ca6b); h ^= h >> 13;
+                s.on_touch((h % 480) as i32, ((h >> 12) % 800) as i32, t + k as u64 * 1_000);
+            }
+            s.on_camera_frame(&frame(i), t + 5_000);
+        }
+        assert_eq!(s.pool().unwrap().camera_bits(), s.target_bits() / 2);
+    }
     #[test] fn finish_requires_hw_random() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); assert!(s.generate(Err(())).is_err()); assert!(s.words().is_empty()); }
     #[test] fn session_wipe_clears_secrets() { let mut s = Session::new(); s.start_arcade(WordCount::Twelve); s.generate(Ok([3;32])).unwrap(); assert_eq!(s.words().len(), 12); s.wipe(); assert!(s.words().is_empty()); }
 
