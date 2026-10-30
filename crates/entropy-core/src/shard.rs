@@ -149,19 +149,20 @@ fn top(counts: &[u8]) -> Option<u8> {
     (m > 0).then(|| counts.iter().position(|&c| c == m).unwrap() as u8)
 }
 
-const NPOL: usize = 47;
+const NPOL: usize = 53;
 const WIN: usize = 64;
 const SLACK_HITS: u32 = 4;
 const HEALTH_MIN_N: u32 = 16;
 
-/// Predictors of the player's next placement, committed before the drop: P0 heuristic best, P1 leftmost,
-/// P2 rightmost, P3 centre-most, P4 lowest landing, P5 same column as last, P6 same placement as last,
-/// P7..P14 lag-k repeats of the rank (k = 1..8), P15 most frequent successor of the previous rank, P16 of
-/// the previous two ranks, P17..P23 lag-k repeats of the column (k = 2..8, best rotation there; the nearest legal column if it is blocked),
-/// P24..P30 lag-k repeats of the full (rot, col) (k = 2..8), P31/P32 most frequent successor column of the previous 1/2 columns,
-/// P40 spawn default (centred, rot 0), P41/P42 heuristic best / lowest landing restricted to rot 0, P43/P44 the same
-/// restricted to the last-used rotation, P45 last (rot, col) for this piece type, P46 most frequent column for this piece type,
-/// P33..P39 majority column of the moves one, two and three periods ago (period 2..8) (these two keep a mostly periodic rank pattern with occasional glitches from earning). MCV is IID-only, so this bounds the credit.
+/// Predictors of the player's next placement, committed before the drop. MCV is IID-only, so these bound the credit.
+/// - P0 heuristic best, P1 leftmost, P2 rightmost, P3 centre-most, P4 lowest landing, P5 same column as last, P6 same placement as last.
+/// - P7..P14 lag-k repeats of the rank (k = 1..8); P15/P16 most frequent successor of the previous 1/2 ranks.
+/// - P17..P23 lag-k repeats of the column (k = 2..8; nearest legal column, best rotation there); P24..P30 lag-k repeats of (rot, col).
+/// - P31/P32 most frequent successor column of the previous 1/2 columns; P33..P39 majority column 1..3 periods back (period 2..8).
+/// - P40 spawn default (centred, rot 0); P41/P42 best / lowest landing at rot 0; P43/P44 the same at the last-used rotation.
+/// - P45 last (rot, col) for this piece type; P46 most frequent column for this piece type.
+/// - P47..P50 best / lowest landing leaving column 0 (P47, P48) or column 7 (P49, P50) empty (unrestricted if none does).
+/// - P51/P52 (rot, col) / column of the move two pieces ago of this piece type.
 #[derive(Clone, Zeroize)]
 pub struct ShardPolicies {
     /// Per predictor: hit bits over the last 64 pieces (bit 0 newest).
@@ -174,19 +175,21 @@ pub struct ShardPolicies {
     /// Previous placements [rot, col], newest first.
     moves: [[u8; 2]; 24],
     nmoves: u8,
-    /// How often each rank followed rank a (index a * 16 + rank) / ranks (a, b) (index (a * 16 + b) * 16 + rank).
-    /// Per piece type: [valid, rot, col] last used, and column counts.
+    /// Per piece type: [valid, rot, col] last used and the one before, and column counts.
     by_piece: [[u8; 3]; 6],
+    by_piece2: [[u8; 3]; 6],
     piece_cols: [[u8; 8]; 6],
+    /// How often each column followed column a (index a * 8 + col) / columns (a, b) (index (a * 8 + b) * 8 + col).
     colsucc1: [u8; 64],
     colsucc2: [u8; 512],
+    /// How often each rank followed rank a (index a * 16 + rank) / ranks (a, b) (index (a * 16 + b) * 16 + rank).
     succ1: [u8; 256],
     succ2: [u8; 4096],
 }
 
 impl Default for ShardPolicies {
     fn default() -> Self {
-        Self { hits: [0; NPOL], scored: 0, last: [0; 3], ranks: [0; 8], nranks: 0, moves: [[0; 2]; 24], nmoves: 0, by_piece: [[0; 3]; 6], piece_cols: [[0; 8]; 6], colsucc1: [0; 64], colsucc2: [0; 512], succ1: [0; 256], succ2: [0; 4096] }
+        Self { hits: [0; NPOL], scored: 0, last: [0; 3], ranks: [0; 8], nranks: 0, moves: [[0; 2]; 24], nmoves: 0, by_piece: [[0; 3]; 6], by_piece2: [[0; 3]; 6], piece_cols: [[0; 8]; 6], colsucc1: [0; 64], colsucc2: [0; 512], succ1: [0; 256], succ2: [0; 4096] }
     }
 }
 
@@ -223,6 +226,17 @@ impl ShardPolicies {
         let bp = self.by_piece[pi];
         hit[45] = bp[0] == 1 && ps.contains(&(bp[1], bp[2])) && (bp[1], bp[2]) == (rot, col);
         hit[46] = top(&self.piece_cols[pi]).and_then(near).map(|p| p.1) == Some(col);
+        let bp2 = self.by_piece2[pi];
+        hit[51] = bp2[0] == 1 && ps.contains(&(bp2[1], bp2[2])) && (bp2[1], bp2[2]) == (rot, col);
+        hit[52] = bp2[0] == 1 && near(bp2[2]).map(|p| p.1) == Some(col);
+        for (i, w) in [0u8, 7].into_iter().enumerate() {
+            let keeps = |r: u8, c: u8| { let mut x = board.clone(); x.place(piece, r, c); (0..H as usize).all(|y| x.cells()[y * 8 + w as usize] == 0) };
+            let any = ps.iter().any(|&(r, c)| keeps(r, c));
+            let pk = |low: bool| ps.iter().copied().filter(|&(r, c)| !any || keeps(r, c)).min_by_key(|&(r, c)| if low { -(board.landing(piece, r, c).unwrap_or(0) as i64) * 256 + c as i64 * 16 + r as i64 } else { -(sc(r, c) * 1000.0) as i64 * 256 + c as i64 * 16 + r as i64 });
+            hit[47 + 2 * i] = pk(false) == mine;
+            hit[48 + 2 * i] = pk(true) == mine;
+        }
+        self.by_piece2[pi] = self.by_piece[pi];
         self.by_piece[pi] = [1, rot, col];
         self.piece_cols[pi][col as usize] = self.piece_cols[pi][col as usize].saturating_add(1);
         hit[0] = rank == 0;
@@ -335,6 +349,22 @@ mod tests {
             let f = play(seed, |b, p, ps, _| { let t = [0i32, 5, 2, 7, 3, 1][p as usize]; *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - t).abs(), b.rank(p, r, c), r)).unwrap() });
             let g = play(seed, |_, p, ps, _| { let t = [0i32, 5, 2, 7, 3, 1][p as usize]; *ps.iter().min_by_key(|&&(r, c)| (r != 0, (c as i32 - t).abs())).unwrap() });
             assert!(a <= 3_000 && f <= 3_000 && g <= 3_000, "seed {seed}: never-rotate-best {a}, column-per-type {f}, column-per-type rot0 {g}");
+        }
+    }
+    fn leaves_empty(b: &Board, p: u8, r: u8, c: u8, col: usize) -> bool { let mut x = b.clone(); x.place(p, r, c); (0..16).all(|y| x.cells()[y * 8 + col] == 0) }
+    #[test] fn shard_well_keeping_earns_nothing() {
+        for seed in 10..14 {
+            let w7 = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (!leaves_empty(b, p, r, c, 7), b.rank(p, r, c), r, c)).unwrap());
+            let w0 = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (!leaves_empty(b, p, r, c, 0), b.rank(p, r, c), c, r)).unwrap());
+            let st = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (!(p == 0 && r == 1 && c == 7), b.rank(p, r, c), c, r)).unwrap());
+            assert!(w7 <= 3_000 && w0 <= 3_000 && st <= 3_000, "seed {seed}: col7 well {w7}, col0 well {w0}, straights to col 7 {st}");
+        }
+    }
+    #[test] fn shard_per_type_two_spot_alternation_earns_nothing() {
+        for seed in 10..14 {
+            let n = std::cell::Cell::new([0usize; 6]);
+            let t = play(seed, |b, p, ps, _| { let mut k = n.get(); let t = [[0i32, 4], [7, 2], [1, 5], [6, 3], [2, 7], [4, 0]][p as usize][k[p as usize] % 2]; k[p as usize] += 1; n.set(k); *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - t).abs(), b.rank(p, r, c), r)).unwrap() });
+            assert!(t <= 3_000, "seed {seed}: two-spot {t}");
         }
     }
     #[test] fn shard_piece_sequence_is_not_credited() { let (a, b) = (play(4, |b, p, _, _| best(b, p)), play(5, |b, p, _, _| best(b, p))); assert_eq!((a, b), (0, 0)); }
