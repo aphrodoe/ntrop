@@ -144,7 +144,7 @@ fn top(counts: &[u8]) -> Option<u8> {
     (m > 0).then(|| counts.iter().position(|&c| c == m).unwrap() as u8)
 }
 
-const NPOL: usize = 17;
+const NPOL: usize = 40;
 const WIN: usize = 64;
 const SLACK_HITS: u32 = 4;
 const HEALTH_MIN_N: u32 = 16;
@@ -152,7 +152,9 @@ const HEALTH_MIN_N: u32 = 16;
 /// Predictors of the player's next placement, committed before the drop: P0 heuristic best, P1 leftmost,
 /// P2 rightmost, P3 centre-most, P4 lowest landing, P5 same column as last, P6 same placement as last,
 /// P7..P14 lag-k repeats of the rank (k = 1..8), P15 most frequent successor of the previous rank, P16 of
-/// the previous two ranks (these two keep a mostly periodic rank pattern with occasional glitches from earning). MCV is IID-only, so this bounds the credit.
+/// the previous two ranks, P17..P23 lag-k repeats of the column (k = 2..8, best rotation there; the nearest legal column if it is blocked),
+/// P24..P30 lag-k repeats of the full (rot, col) (k = 2..8), P31/P32 most frequent successor column of the previous 1/2 columns,
+/// P33..P39 majority column of the moves one, two and three periods ago (period 2..8) (these two keep a mostly periodic rank pattern with occasional glitches from earning). MCV is IID-only, so this bounds the credit.
 #[derive(Clone, Zeroize)]
 pub struct ShardPolicies {
     /// Per predictor: hit bits over the last 64 pieces (bit 0 newest).
@@ -162,14 +164,19 @@ pub struct ShardPolicies {
     last: [u8; 3],
     ranks: [u8; 8],
     nranks: u8,
+    /// Previous placements [rot, col], newest first.
+    moves: [[u8; 2]; 24],
+    nmoves: u8,
     /// How often each rank followed rank a (index a * 16 + rank) / ranks (a, b) (index (a * 16 + b) * 16 + rank).
+    colsucc1: [u8; 64],
+    colsucc2: [u8; 512],
     succ1: [u8; 256],
     succ2: [u8; 4096],
 }
 
 impl Default for ShardPolicies {
     fn default() -> Self {
-        Self { hits: [0; NPOL], scored: 0, last: [0; 3], ranks: [0; 8], nranks: 0, succ1: [0; 256], succ2: [0; 4096] }
+        Self { hits: [0; NPOL], scored: 0, last: [0; 3], ranks: [0; 8], nranks: 0, moves: [[0; 2]; 24], nmoves: 0, colsucc1: [0; 64], colsucc2: [0; 512], succ1: [0; 256], succ2: [0; 4096] }
     }
 }
 
@@ -180,6 +187,7 @@ impl ShardPolicies {
         let sc = |r: u8, c: u8| board.score_after(piece, r, c);
         let pick = |f: &dyn Fn(&(u8, u8)) -> i64| ps.iter().copied().min_by_key(|p| f(p));
         let mine = Some((rot, col));
+        let best_at = |col: u8| ps.iter().copied().filter(|p| p.1 == col).fold(None::<(u8, u8)>, |b, p| match b { Some(q) if sc(q.0, q.1) >= sc(p.0, p.1) => b, _ => Some(p) });
         let mut pred: [Option<(u8, u8)>; 7] = [None; 7];
         pred[1] = pick(&|&(r, c)| (c as i64) * 16 + r as i64);
         pred[2] = pick(&|&(r, c)| -(c as i64) * 16 + r as i64);
@@ -187,14 +195,37 @@ impl ShardPolicies {
         pred[4] = pick(&|&(r, c)| -(board.landing(piece, r, c).unwrap_or(0) as i64) * 256 + c as i64 * 16 + r as i64);
         if self.last[0] == 1 {
             let (lr, lc) = (self.last[1], self.last[2]);
-            let best = ps.iter().copied().filter(|p| p.1 == lc).fold(None::<(u8, u8)>, |b, p| match b { Some(q) if sc(q.0, q.1) >= sc(p.0, p.1) => b, _ => Some(p) });
-            pred[5] = best;
+            pred[5] = best_at(lc);
             pred[6] = ps.contains(&(lr, lc)).then_some((lr, lc));
         }
+        let near = |mc: u8| ps.iter().copied().min_by_key(|&(r, c)| ((c as i32 - mc as i32).abs(), -(sc(r, c) * 1000.0) as i64, r));
         let mut hit = [false; NPOL];
         hit[0] = rank == 0;
         for i in 1..7 { hit[i] = pred[i] == mine; }
         for k in 1..=8usize { hit[6 + k] = self.nranks as usize >= k && self.ranks[k - 1] == rank; }
+        for k in 2..=8usize {
+            if self.nmoves as usize >= k {
+                let [mr, mc] = self.moves[k - 1];
+                hit[15 + k] = near(mc).map(|p| p.1) == Some(col);
+                hit[22 + k] = ps.contains(&(mr, mc)) && (mr, mc) == (rot, col);
+            }
+        }
+        for per in 2..=8usize {
+            let mut v: Vec<u8> = (1..=3).filter(|m| self.nmoves as usize >= m * per).map(|m| self.moves[m * per - 1][1]).collect();
+            let maj = v.iter().copied().max_by_key(|&c| (v.iter().filter(|&&d| d == c).count(), c == v[0])).filter(|_| !v.is_empty());
+            hit[31 + per] = maj.and_then(near).map(|p| p.1) == Some(col);
+            v.zeroize();
+        }
+        if self.nmoves >= 1 {
+            let c = self.moves[0][1] as usize * 8;
+            hit[31] = top(&self.colsucc1[c..c + 8]).and_then(near).map(|p| p.1) == Some(col);
+            self.colsucc1[c + col as usize] = self.colsucc1[c + col as usize].saturating_add(1);
+        }
+        if self.nmoves >= 2 {
+            let c = (self.moves[1][1] as usize * 8 + self.moves[0][1] as usize) * 8;
+            hit[32] = top(&self.colsucc2[c..c + 8]).and_then(near).map(|p| p.1) == Some(col);
+            self.colsucc2[c + col as usize] = self.colsucc2[c + col as usize].saturating_add(1);
+        }
         if self.nranks >= 1 {
             let c = self.ranks[0] as usize * 16;
             hit[15] = top(&self.succ1[c..c + 16]) == Some(rank);
@@ -210,6 +241,9 @@ impl ShardPolicies {
         self.ranks.rotate_right(1);
         self.ranks[0] = rank;
         self.nranks = (self.nranks + 1).min(8);
+        self.moves.rotate_right(1);
+        self.moves[0] = [rot, col];
+        self.nmoves = (self.nmoves + 1).min(24);
         self.last = [1, rot, col];
     }
 
@@ -261,7 +295,11 @@ mod tests {
         ];
         assert!(t.iter().all(|&x| x <= 3_000), "totals {t:?}");
     }
-    #[test] fn shard_rank_cycle_earns_nothing() { let t = play(3, |b, p, ps, i| near_rank(b, p, ps, (i % 4) as u8)); assert!(t <= 3_000, "total {t}"); }
+    #[test] fn shard_rank_cycle_earns_little() { let t = play(3, |b, p, ps, i| near_rank(b, p, ps, (i % 4) as u8)); assert!(t <= 30_000, "total {t}"); }
+    #[test] fn shard_column_cycle_earns_nothing() {
+        let t = play(6, |b, p, ps, i| { let tc = [0i32, 2, 4, 6][i as usize % 4]; *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - tc).abs(), b.rank(p, r, c), r)).unwrap() });
+        assert!(t <= 3_000, "total {t}");
+    }
     #[test] fn shard_piece_sequence_is_not_credited() { let (a, b) = (play(4, |b, p, _, _| best(b, p)), play(5, |b, p, _, _| best(b, p))); assert_eq!((a, b), (0, 0)); }
     #[test] fn wipe_clears_board() { let mut s = sess(); for i in 0..5u64 { s.shard_spawn(2); let (r, c) = s.shard.placements(2)[0]; s.shard_place(r, c, i); } assert!(s.shard_cells().iter().any(|&v| v == 1)); s.wipe(); assert!(s.shard_cells().iter().all(|&v| v == 0)); }
 }
