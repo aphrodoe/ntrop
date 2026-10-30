@@ -550,6 +550,19 @@ Course rules (`src/glide.rs`):
   - `EntropyPool::add_shard(&mut self, piece: u8, rot: u8, col: u8, t_us: u64, credit_mbits: u32, healthy: bool)` absorbs `TAG_SHARD = 0x06`, through the shared helper.
   - `Session::shard_spawn(&mut self, piece: u8)`. The piece comes from the app's game PRNG and is **never credited**.
   - `Session::shard_place(&mut self, rot: u8, col: u8, t_us: u64) -> Option<Estimate>` ranks the placement *before* placing it, pushes the rank into `Mcv::new(16, 3000)`, absorbs it, then places the piece.
+  - **Amendment (pre-dispatch, after the Task 14 review):** MCV alone is IID-only and would credit fixed policies and rank cycles. Add `ShardPolicies` (core, `Zeroize`):
+    - Policies P0..P6 each predict a (rot, col) from the current board, piece and last move, *before* the drop:
+      - P0: heuristic best (rank 0)
+      - P1: leftmost (min col, then min rot)
+      - P2: rightmost
+      - P3: centre-most (|col − 3.5| min, then min rot)
+      - P4: lowest landing row
+      - P5: same column as last (best rotation there)
+      - P6: same (rot, col) as last, if legal
+    - P7..P14 are lag-k repeats of the *rank* (k = 1..8). They hit when the chosen rank equals the rank k moves ago.
+    - Each keeps hits over the last 64 pieces. `p_ub = min(1, (max hits + 4) / n)`, and `pol_mbits = floor(−log2 p_ub · 1000)`.
+    - Credit = `min(mcv.credit, pol_mbits)`, capped at 3000.
+    - Unhealthy if either estimate says so, or if `p_ub > 0.5` once 16 pieces are scored.
   - `Session::shard_cells(&self) -> [u8; 128]`. `wipe` zeroizes the board and the Mcv.
 - Produces (AppState): `Screen.shard`, `in property <[int]> shard-cells` (128 cells), `in property <[int]> ghost-cells` (the falling piece's preview), and `callback shard-move(int)` (column delta), `shard-rotate()`, `shard-drop()`.
 
@@ -561,6 +574,8 @@ Course rules (`src/glide.rs`):
 #[test] fn shard_illegal_placement_rejected() { /* column past the right edge → place() returns None */ }
 #[test] fn shard_best_play_earns_nothing() { /* Session: 120 pieces from a SHA-256 counter, always placing the rank-0 placement → total credit 0 */ }
 #[test] fn shard_varied_play_earns() { /* same pieces, choose the placement whose rank = (SHA-256 counter byte % 8) when available → total ≥ 100_000 mbits */ }
+#[test] fn shard_fixed_policies_earn_nothing() { /* 120 pieces each under: always leftmost, always rightmost, always centre, always lowest landing → each total ≤ 3_000 mbits */ }
+#[test] fn shard_rank_cycle_earns_nothing() { /* choose ranks cycling 0,1,2,3 (when available), 120 pieces → total ≤ 3_000 */ }
 #[test] fn shard_piece_sequence_is_not_credited() { /* identical choices (always rank 0) under two different piece sequences → both earn 0 */ }
 #[test] fn wipe_clears_board() { /* place pieces, wipe, cells all zero */ }
 ```
