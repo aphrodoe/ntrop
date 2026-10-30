@@ -19,8 +19,9 @@ export component SummaryScreen inherits VerticalLayout {
         horizontal-alignment: center;
     }
     Card { title: "Touch"; body: AppState.touch-bits + " bits (conservative estimate)"; }
-    Card { title: "Camera"; body: AppState.camera-bits + " bits (conservative estimate)"; }
-    Card { title: "Game skill"; body: AppState.game-bits + " bits (conservative estimate)"; }
+    // Deliberate: rows for sources that credited nothing this run are hidden (Touch always shows).
+    if AppState.camera-bits > 0: Card { title: "Camera"; body: AppState.camera-bits + " bits (conservative estimate)"; }
+    if AppState.game-bits > 0: Card { title: "Game skill"; body: AppState.game-bits + " bits (conservative estimate)"; }
     Card { title: "+ hardware 256"; body: "Mixed in from the device TRNG"; }
     Rectangle { vertical-stretch: 1; }
     Button { text: "Home"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }

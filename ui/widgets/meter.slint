@@ -20,16 +20,19 @@ export component Meter inherits VerticalLayout {
         Rectangle {
             x: 0px;
             width: parent.width * root.t / root.tgt;
+            animate width { duration: 120ms; }
             background: AppState.touch-healthy ? Neon.touch : Theme.palette-danger;
         }
         Rectangle {
             x: parent.width * root.t / root.tgt;
             width: parent.width * root.c / root.tgt;
+            animate x, width { duration: 120ms; }
             background: AppState.camera-healthy ? Neon.camera : Theme.palette-danger;
         }
         Rectangle {
             x: parent.width * (root.t + root.c) / root.tgt;
             width: parent.width * root.g / root.tgt;
+            animate x, width { duration: 120ms; }
             background: AppState.game-healthy ? Neon.game : Theme.palette-danger;
         }
     }

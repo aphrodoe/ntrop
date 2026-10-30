@@ -9,6 +9,8 @@ export component QuizScreen inherits VerticalLayout {
     padding-top: Theme.spacing-xl * 2;
     spacing: Theme.spacing-md;
 
+    // Home sits at the top, away from the answers, so a mis-tap can't wipe the run.
+    Button { text: "Home"; size: ControlSize.sm; variant: ButtonVariant.ghost; clicked => { AppState.back-home(); } }
     Text {
         text: "Quiz " + (AppState.quiz-step + 1) + " / 3";
         color: Theme.palette-foreground;
@@ -25,6 +27,5 @@ export component QuizScreen inherits VerticalLayout {
         horizontal-alignment: center;
     }
     Rectangle { vertical-stretch: 1; }
-    Button { text: "Home"; size: ControlSize.md; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
     for c[i] in AppState.quiz-choices: Button { text: c; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.answer(i); } }
 }

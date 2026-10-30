@@ -30,6 +30,9 @@ fn with_api<R>(f: impl FnOnce(&CameraApi) -> R) -> Option<R> {
     API.with(|c| c.get_or_init(|| CameraApi::try_new_with_timeout(Duration::from_millis(500))).as_ref().map(f))
 }
 
+/// Camera palette colour; keep in sync with `Neon.camera` (#FF2BD6) in ui/state.slint.
+const CAMERA_RGB: u32 = 0xFF2BD6;
+
 /// Downscaled XOR of the low 2 bits against the previous frame, as magenta noise. The raw image is never shown.
 fn preview(bytes: &[u8]) -> Option<Image> {
     if bytes.len() < camera::CAMERA_WIDTH * camera::CAMERA_HEIGHT * BPP {
@@ -44,7 +47,7 @@ fn preview(bytes: &[u8]) -> Option<Image> {
             let v = bytes[(y * STEP * camera::CAMERA_WIDTH + x * STEP) * BPP] & 3;
             let n = (v ^ prev[i]) as u32 * 85;
             prev[i] = v;
-            *px = Rgba8Pixel { r: n as u8, g: (n * 43 / 255) as u8, b: (n * 214 / 255) as u8, a: 255 };
+            *px = Rgba8Pixel { r: (n * (CAMERA_RGB >> 16) / 255) as u8, g: (n * (CAMERA_RGB >> 8 & 0xFF) / 255) as u8, b: (n * (CAMERA_RGB & 0xFF) / 255) as u8, a: 255 };
         }
     });
     Some(Image::from_rgba8(buf))

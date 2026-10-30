@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme } from "@ui/theme.slint";
+import { Theme, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { Sheet } from "@ui/sheet.slint";
 import { AppState, Neon } from "../state.slint";
 
 component GameCard inherits Rectangle {
@@ -57,8 +59,12 @@ component WordToggle inherits Rectangle {
     TouchArea { clicked => { root.picked(); } }
 }
 
-export component HomeScreen inherits VerticalLayout {
+export component HomeScreen inherits Rectangle {
     property <int> words: 24;
+    property <bool> help: false;
+    VerticalLayout {
+    width: parent.width;
+    height: parent.height;
     padding: Theme.spacing-xl;
     padding-top: Theme.spacing-xl * 2;
     spacing: Theme.spacing-md;
@@ -88,4 +94,20 @@ export component HomeScreen inherits VerticalLayout {
     GameCard { title: "Static Hunt"; hook: "Blast static ghosts. Your misses are the dice."; accent: Neon.game; clicked => { AppState.start-arcade(root.words, 2); } }
     GameCard { title: "Dice Duel"; hook: "Roll real dice. No chip involved."; accent: Theme.palette-foreground; clicked => { AppState.start-dice(root.words); } }
     Rectangle { vertical-stretch: 1; }
+    Button { text: "How it works"; variant: ButtonVariant.ghost; clicked => { root.help = true; } }
+    }
+    Sheet {
+        width: parent.width;
+        height: parent.height;
+        open: root.help;
+        dismissed => { root.help = false; }
+        Text { text: "How it works"; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-title; font-weight: Theme.font-weight-semibold; }
+        for line in [
+            "We mix your chaos with the chip's randomness: SHA-256(chip ‖ you).",
+            "Even if you play badly, it's never weaker than the chip.",
+            "Credits are conservative estimates; stale input is rejected live.",
+            "Outguess and Static Hunt only pay for what the machine can't predict.",
+            "Dice Duel uses only your dice, so you can verify it on a laptop."
+        ]: Text { text: line; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-body; wrap: word-wrap; }
+    }
 }

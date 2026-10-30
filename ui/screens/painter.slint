@@ -13,6 +13,24 @@ export component PainterScreen inherits Rectangle {
         moved => { AppState.touch(self.mouse-x, self.mouse-y); }
     }
     for d in AppState.trail: Rectangle {
+        x: d.x - 12px;
+        y: d.y - 12px;
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: Neon.touch.with-alpha(0.12);
+        opacity: 1 - d.age;
+    }
+    for d in AppState.trail: Rectangle {
+        x: d.x - 9px;
+        y: d.y - 9px;
+        width: 18px;
+        height: 18px;
+        border-radius: 9px;
+        background: Neon.touch.with-alpha(0.25);
+        opacity: 1 - d.age;
+    }
+    for d in AppState.trail: Rectangle {
         x: d.x - 6px;
         y: d.y - 6px;
         width: 12px;

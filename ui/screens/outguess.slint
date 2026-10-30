@@ -7,9 +7,10 @@ import { Meter } from "../widgets/meter.slint";
 
 component Door inherits Rectangle {
     in property <int> index;
-    background: Neon.game;
-    border-radius: Theme.spacing-md;
     opacity: ta.pressed ? 0.6 : 1;
+    Rectangle { x: -6px; y: -6px; width: parent.width + 12px; height: parent.height + 12px; border-radius: Theme.spacing-md + 6px; background: Neon.game.with-alpha(0.12); }
+    Rectangle { x: -3px; y: -3px; width: parent.width + 6px; height: parent.height + 6px; border-radius: Theme.spacing-md + 3px; background: Neon.game.with-alpha(0.25); }
+    Rectangle { background: Neon.game; border-radius: Theme.spacing-md; }
     Text {
         text: root.index + 1;
         color: white;
