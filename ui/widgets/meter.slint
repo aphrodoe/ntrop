@@ -15,7 +15,7 @@ export component Meter inherits VerticalLayout {
         tone: root.total >= AppState.target-bits ? ProgressBarTone.success : ProgressBarTone.primary;
     }
     Text {
-        text: root.total + " / " + AppState.target-bits + " bits";
+        text: root.total + " / " + AppState.target-bits + " bits (conservative estimate)";
         color: Theme.palette-muted;
         font-family: Theme.font-primary;
         font-size: Theme.font-size-label;

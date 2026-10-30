@@ -27,8 +27,11 @@ fn hw_random() -> Result<[u8; 32], ()> {
 fn sync_meter(ui: &AppWindow, s: &Session) {
     let st = ui.global::<AppState>();
     if let Some(p) = s.pool() {
-        st.set_touch_bits(p.touch_bits() as i32);
-        st.set_camera_bits(p.camera_bits() as i32);
+        // Display-only cap so the shown total never exceeds the target (camera <= half, touch fills the rest).
+        let target = s.target_bits();
+        let cam = p.camera_bits().min(target / 2);
+        st.set_touch_bits(p.touch_bits().min(target - cam) as i32);
+        st.set_camera_bits(cam as i32);
         st.set_touch_healthy(p.touch_healthy());
         st.set_camera_healthy(p.camera_healthy());
     }

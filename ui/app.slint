@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 import { Theme, UISize, Images, ControlSize } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
 import { AppState, Screen, TrailDot } from "state.slint";
 import { HomeScreen } from "screens/home.slint";
 import { PainterScreen } from "screens/painter.slint";
@@ -20,10 +21,18 @@ export component AppWindow inherits Window {
     if AppState.screen == Screen.summary: SummaryScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.error: ErrorScreen { width: parent.width; height: parent.height; }
     // Words / SeedQR / Quiz / Done / Dice arrive in Tasks 6-9.
-    if AppState.screen == Screen.words || AppState.screen == Screen.dice: Text {
-        text: AppState.screen == Screen.words ? "Words (Task 6)" : "Dice Duel (Task 9)";
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        horizontal-alignment: center;
+    if AppState.screen == Screen.words || AppState.screen == Screen.dice: VerticalLayout {
+        width: parent.width;
+        height: parent.height;
+        padding: Theme.spacing-xl;
+        Text {
+            text: AppState.screen == Screen.words ? "Words (Task 6)" : "Dice Duel (Task 9)";
+            color: Theme.palette-foreground;
+            font-family: Theme.font-primary;
+            horizontal-alignment: center;
+            vertical-stretch: 1;
+            vertical-alignment: center;
+        }
+        Button { text: "Home"; size: ControlSize.lg; full-width: true; clicked => { AppState.back-home(); } }
     }
 }

@@ -36,6 +36,13 @@ export component PainterScreen inherits Rectangle {
         width: parent.width - Theme.spacing-xl * 2;
         Meter { }
     }
+    Button {
+        x: Theme.spacing-xl;
+        y: Theme.spacing-xl * 2 + 90px;
+        text: "Home";
+        variant: ButtonVariant.ghost;
+        clicked => { AppState.back-home(); }
+    }
     HorizontalLayout {
         x: Theme.spacing-xl;
         height: 64px;
