@@ -3,6 +3,7 @@
 import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
 import { Button } from "@ui/button.slint";
 import { AppState } from "../state.slint";
+import { Toast, ToastVariant } from "@ui/toast.slint";
 import { Meter } from "../widgets/meter.slint";
 
 export component PainterScreen inherits Rectangle {
@@ -42,6 +43,13 @@ export component PainterScreen inherits Rectangle {
         text: "Home";
         variant: ButtonVariant.ghost;
         clicked => { AppState.back-home(); }
+    }
+    if !AppState.touch-healthy: Toast {
+        y: parent.height - 64px - Theme.spacing-xl * 2 - 120px;
+        width: parent.width;
+        height: 120px;
+        variant: ToastVariant.error;
+        message: "Touch rejected: keep moving";
     }
     HorizontalLayout {
         x: Theme.spacing-xl;

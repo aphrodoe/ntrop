@@ -17,4 +17,4 @@ contact-email = "b24cs1005@iitj.ac.in"
 support-url = ""
 
 [permissions]
-template = ["gui-app"]
+template = ["gui-app", "entropy-arcade"]

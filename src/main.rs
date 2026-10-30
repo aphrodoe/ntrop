@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Foundation Devices, Inc. <hello@foundation.xyz>
 // SPDX-License-Identifier: MIT
 
+mod haptics;
 mod theme;
 
 use std::cell::RefCell;
@@ -95,6 +96,43 @@ fn sync_meter(ui: &AppWindow, s: &Session) {
     st.set_target_bits(s.target_bits() as i32);
 }
 
+/// Fires haptics from pool counters (never secrets): tick per 8 credited bits, ramp at 90%, full, alert on unhealthy.
+#[derive(Default)]
+struct Feedback {
+    ticks: u32,
+    ramped: bool,
+    full: bool,
+    touch_ok: bool,
+}
+
+impl Feedback {
+    fn new() -> Self {
+        Self { touch_ok: true, ..Default::default() }
+    }
+
+    fn update(&mut self, credited: u32, target: u32, full: bool, touch_ok: bool) {
+        if self.touch_ok && !touch_ok {
+            haptics::alert();
+        }
+        self.touch_ok = touch_ok;
+        if full {
+            if !self.full {
+                self.full = true;
+                haptics::full();
+            }
+        } else if credited / 8 > self.ticks {
+            haptics::tick();
+        }
+        self.ticks = credited / 8;
+        if !self.ramped && credited * 10 >= target * 9 {
+            self.ramped = true;
+            if !full {
+                haptics::ramp();
+            }
+        }
+    }
+}
+
 fn app_main(_cx: AppContext, ui: AppWindow) {
     log_server::init_wait(env!("CARGO_CRATE_NAME")).unwrap();
     log::set_max_level(log::LevelFilter::Info);
@@ -104,11 +142,13 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     let session = Rc::new(RefCell::new(Session::new()));
     let trail: Rc<VecModel<TrailDot>> = Rc::new(VecModel::default());
     let start = Instant::now();
+    let fb = Rc::new(RefCell::new(Feedback::new()));
     let st = ui.global::<AppState>();
     st.set_trail(ModelRc::from(trail.clone()));
 
-    let (u, s, t) = (ui.as_weak(), session.clone(), trail.clone());
+    let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
     st.on_start_arcade(move |n| {
+        *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
         let wc = if n == 24 { WordCount::TwentyFour } else { WordCount::Twelve };
         s.borrow_mut().start_arcade(wc);
@@ -124,7 +164,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         u.upgrade().unwrap().global::<AppState>().set_screen(Screen::Dice);
     });
 
-    let (u, s, t) = (ui.as_weak(), session.clone(), trail.clone());
+    let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
     st.on_touch(move |x, y| {
         let ui = u.upgrade().unwrap();
         let t_us = start.elapsed().as_micros() as u64;
@@ -135,6 +175,10 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         t.push(TrailDot { x, y, age: 0.0 });
         if r != SampleResult::Uncredited {
             sync_meter(&ui, &s.borrow());
+            let sb = s.borrow();
+            if let Some(p) = sb.pool() {
+                f.borrow_mut().update(p.credited_bits(), sb.target_bits(), p.is_full(), p.touch_healthy());
+            }
         }
     });
 

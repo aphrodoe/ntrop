@@ -56,3 +56,5 @@
     "FinishResponse",
     "NavigationCancel",
 ]
+[entropy-arcade]
+"os/haptics" = ["Vibrate"]
