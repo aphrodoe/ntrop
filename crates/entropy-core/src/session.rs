@@ -77,7 +77,8 @@ impl Session {
             Some(sym) => {
                 let m = self.glide_mcv.push(sym);
                 let (ceil, ok) = self.glide.bound().unwrap_or((0, true));
-                Estimate { credit_mbits: m.credit_mbits.min(ceil), healthy: m.healthy && ok }
+                let healthy = m.healthy && ok;
+                Estimate { credit_mbits: if healthy { m.credit_mbits.min(ceil) } else { 0 }, healthy }
             }
             // No symbol: nothing earned, and the previous health verdict stands.
             None => Estimate { credit_mbits: 0, healthy: self.pool.as_ref().is_none_or(|p| p.game_healthy()) },
@@ -105,12 +106,20 @@ impl Session {
         self.shard_pol.observe(&self.shard, piece, rot, col, rank);
         let m = self.shard_mcv.push(rank as u16);
         let (ceil, ok) = self.shard_pol.bound().unwrap_or((0, true));
-        let e = Estimate { credit_mbits: m.credit_mbits.min(ceil).min(3000), healthy: m.healthy && ok };
+        let healthy = m.healthy && ok;
+        let e = Estimate { credit_mbits: if healthy { m.credit_mbits.min(ceil).min(3000) } else { 0 }, healthy };
         if let Some(p) = self.pool.as_mut() {
             p.add_shard(piece, rot, col, t_us, e.credit_mbits, e.healthy);
         }
         self.shard.place(piece, rot, col);
         Some(e)
+    }
+
+    /// Absorbs a Shard Stack drag (`kind` 0, `arg` = column delta) or rotation (`kind` 1) with its time. Never credited.
+    pub fn shard_move(&mut self, kind: u8, arg: i32, t_us: u64) {
+        if let Some(p) = self.pool.as_mut() {
+            p.add_shard_move(kind, arg, t_us);
+        }
     }
 
     pub fn shard_cells(&self) -> [u8; 128] {

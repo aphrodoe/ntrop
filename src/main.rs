@@ -308,12 +308,14 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
 
     let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
     st.on_shard_move(move |d| {
+        s.borrow_mut().shard_move(0, d, start.elapsed().as_micros() as u64);
         sh.borrow_mut().shift(d);
         let ui = u.upgrade().unwrap();
         sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
     });
     let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
     st.on_shard_rotate(move || {
+        s.borrow_mut().shard_move(1, 0, start.elapsed().as_micros() as u64);
         sh.borrow_mut().rotate();
         let ui = u.upgrade().unwrap();
         sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
@@ -548,9 +550,10 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     // finish() and back-home() both wipe the session and every secret-bearing UI property.
-    let (u, s, t, ht, g) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone(), gesture.clone());
+    let (u, s, t, ht, g, sh) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone(), gesture.clone(), shard.clone());
     let leave = Rc::new(move || {
         ht.stop();
+        *sh.borrow_mut() = shard::Shard::new(1); // drops piece/rot/col/rng
         *g.borrow_mut() = Gesture::default();
         s.borrow_mut().wipe();
         t.set_vec(Vec::new());

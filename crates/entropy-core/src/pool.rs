@@ -115,6 +115,16 @@ impl EntropyPool {
         self.add_game(TAG_SHARD, Some(piece), rot as i32, col as i32, t_us, credit_mbits, healthy);
     }
 
+    /// Absorbs a Shard Stack drag or rotation (`0xF0|kind ‖ arg ‖ t_us`). Timing only: never credited.
+    pub fn add_shard_move(&mut self, kind: u8, arg: i32, t_us: u64) {
+        let mut raw = [0u8; 13];
+        raw[0] = 0xF0 | kind;
+        raw[1..5].copy_from_slice(&arg.to_le_bytes());
+        raw[5..].copy_from_slice(&t_us.to_le_bytes());
+        self.absorb(TAG_SHARD, &raw);
+        raw.zeroize();
+    }
+
     fn add_game(&mut self, tag: u8, door: Option<u8>, x: i32, y: i32, t_us: u64, credit_mbits: u32, healthy: bool) {
         let mut raw = [0u8; 17];
         let n = if let Some(d) = door { raw[0] = d; 1 } else { 0 };

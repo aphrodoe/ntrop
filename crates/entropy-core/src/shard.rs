@@ -38,6 +38,11 @@ pub fn shape(piece: u8, rot: u8) -> Vec<(u8, u8)> {
     r[rot as usize % r.len()].clone()
 }
 
+/// Where a freshly spawned piece sits (centred), the placement "just press Drop" gives.
+pub fn spawn_col(piece: u8, rot: u8) -> u8 {
+    (W - shape(piece, rot).iter().map(|c| c.0).max().unwrap_or(0) - 1) / 2
+}
+
 pub fn rotation_count(piece: u8) -> u8 {
     rotations(piece).len() as u8
 }
@@ -144,7 +149,7 @@ fn top(counts: &[u8]) -> Option<u8> {
     (m > 0).then(|| counts.iter().position(|&c| c == m).unwrap() as u8)
 }
 
-const NPOL: usize = 40;
+const NPOL: usize = 47;
 const WIN: usize = 64;
 const SLACK_HITS: u32 = 4;
 const HEALTH_MIN_N: u32 = 16;
@@ -154,6 +159,8 @@ const HEALTH_MIN_N: u32 = 16;
 /// P7..P14 lag-k repeats of the rank (k = 1..8), P15 most frequent successor of the previous rank, P16 of
 /// the previous two ranks, P17..P23 lag-k repeats of the column (k = 2..8, best rotation there; the nearest legal column if it is blocked),
 /// P24..P30 lag-k repeats of the full (rot, col) (k = 2..8), P31/P32 most frequent successor column of the previous 1/2 columns,
+/// P40 spawn default (centred, rot 0), P41/P42 heuristic best / lowest landing restricted to rot 0, P43/P44 the same
+/// restricted to the last-used rotation, P45 last (rot, col) for this piece type, P46 most frequent column for this piece type,
 /// P33..P39 majority column of the moves one, two and three periods ago (period 2..8) (these two keep a mostly periodic rank pattern with occasional glitches from earning). MCV is IID-only, so this bounds the credit.
 #[derive(Clone, Zeroize)]
 pub struct ShardPolicies {
@@ -168,6 +175,9 @@ pub struct ShardPolicies {
     moves: [[u8; 2]; 24],
     nmoves: u8,
     /// How often each rank followed rank a (index a * 16 + rank) / ranks (a, b) (index (a * 16 + b) * 16 + rank).
+    /// Per piece type: [valid, rot, col] last used, and column counts.
+    by_piece: [[u8; 3]; 6],
+    piece_cols: [[u8; 8]; 6],
     colsucc1: [u8; 64],
     colsucc2: [u8; 512],
     succ1: [u8; 256],
@@ -176,7 +186,7 @@ pub struct ShardPolicies {
 
 impl Default for ShardPolicies {
     fn default() -> Self {
-        Self { hits: [0; NPOL], scored: 0, last: [0; 3], ranks: [0; 8], nranks: 0, moves: [[0; 2]; 24], nmoves: 0, colsucc1: [0; 64], colsucc2: [0; 512], succ1: [0; 256], succ2: [0; 4096] }
+        Self { hits: [0; NPOL], scored: 0, last: [0; 3], ranks: [0; 8], nranks: 0, moves: [[0; 2]; 24], nmoves: 0, by_piece: [[0; 3]; 6], piece_cols: [[0; 8]; 6], colsucc1: [0; 64], colsucc2: [0; 512], succ1: [0; 256], succ2: [0; 4096] }
     }
 }
 
@@ -199,7 +209,22 @@ impl ShardPolicies {
             pred[6] = ps.contains(&(lr, lc)).then_some((lr, lc));
         }
         let near = |mc: u8| ps.iter().copied().min_by_key(|&(r, c)| ((c as i32 - mc as i32).abs(), -(sc(r, c) * 1000.0) as i64, r));
+        let pi = piece as usize % SHAPES.len();
+        let restricted = |rr: u8, low: bool| ps.iter().copied().filter(|p| p.0 == rr).min_by_key(|&(r, c)| if low { -(board.landing(piece, r, c).unwrap_or(0) as i64) * 256 + c as i64 } else { -(sc(r, c) * 1000.0) as i64 * 256 + c as i64 });
         let mut hit = [false; NPOL];
+        let sp = (0u8, spawn_col(piece, 0));
+        hit[40] = ps.contains(&sp) && sp == (rot, col);
+        hit[41] = restricted(0, false) == mine;
+        hit[42] = restricted(0, true) == mine;
+        if self.last[0] == 1 {
+            hit[43] = restricted(self.last[1], false) == mine;
+            hit[44] = restricted(self.last[1], true) == mine;
+        }
+        let bp = self.by_piece[pi];
+        hit[45] = bp[0] == 1 && ps.contains(&(bp[1], bp[2])) && (bp[1], bp[2]) == (rot, col);
+        hit[46] = top(&self.piece_cols[pi]).and_then(near).map(|p| p.1) == Some(col);
+        self.by_piece[pi] = [1, rot, col];
+        self.piece_cols[pi][col as usize] = self.piece_cols[pi][col as usize].saturating_add(1);
         hit[0] = rank == 0;
         for i in 1..7 { hit[i] = pred[i] == mine; }
         for k in 1..=8usize { hit[6 + k] = self.nranks as usize >= k && self.ranks[k - 1] == rank; }
@@ -299,6 +324,18 @@ mod tests {
     #[test] fn shard_column_cycle_earns_nothing() {
         let t = play(6, |b, p, ps, i| { let tc = [0i32, 2, 4, 6][i as usize % 4]; *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - tc).abs(), b.rank(p, r, c), r)).unwrap() });
         assert!(t <= 3_000, "total {t}");
+    }
+    #[test] fn shard_unhealthy_earns_nothing() {
+        let t = play(7, |_, p, ps, _| { let sc = spawn_col(p, 0); *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - sc as i32).abs(), r)).unwrap() });
+        assert!(t <= 3_000, "just press Drop {t}");
+    }
+    #[test] fn shard_piece_driven_habits_earn_nothing() {
+        for seed in 10..14 {
+            let a = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (r != 0, b.rank(p, r, c), c)).unwrap());
+            let f = play(seed, |b, p, ps, _| { let t = [0i32, 5, 2, 7, 3, 1][p as usize]; *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - t).abs(), b.rank(p, r, c), r)).unwrap() });
+            let g = play(seed, |_, p, ps, _| { let t = [0i32, 5, 2, 7, 3, 1][p as usize]; *ps.iter().min_by_key(|&&(r, c)| (r != 0, (c as i32 - t).abs())).unwrap() });
+            assert!(a <= 3_000 && f <= 3_000 && g <= 3_000, "seed {seed}: never-rotate-best {a}, column-per-type {f}, column-per-type rot0 {g}");
+        }
     }
     #[test] fn shard_piece_sequence_is_not_credited() { let (a, b) = (play(4, |b, p, _, _| best(b, p)), play(5, |b, p, _, _| best(b, p))); assert_eq!((a, b), (0, 0)); }
     #[test] fn wipe_clears_board() { let mut s = sess(); for i in 0..5u64 { s.shard_spawn(2); let (r, c) = s.shard.placements(2)[0]; s.shard_place(r, c, i); } assert!(s.shard_cells().iter().any(|&v| v == 1)); s.wipe(); assert!(s.shard_cells().iter().all(|&v| v == 0)); }
