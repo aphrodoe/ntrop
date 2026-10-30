@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 import { Ios } from "../state.slint";
+import { GlossyButton } from "glossy_button.slint";
 
 // Dimmed backdrop with a dark translucent sheet of glossy pill buttons at the bottom.
 export component ActionSheet inherits Rectangle {
+    in property <string> title;
     in property <[string]> buttons;
     callback chosen(int);
     background: #00000080;
@@ -16,15 +18,8 @@ export component ActionSheet inherits Rectangle {
             padding: 20px;
             padding-bottom: 28px;
             spacing: 12px;
-            for b[i] in root.buttons: Rectangle {
-                height: 58px;
-                Image {
-                    width: parent.width; height: 58px;
-                    source: ta.pressed ? @image-url("../../resources/icons/sheet-button-on.svg", nine-slice(12)) : @image-url("../../resources/icons/sheet-button.svg", nine-slice(12));
-                }
-                Text { text: b; color: ta.pressed ? #FFFFFF : #1A1A1A; font-family: Ios.font; font-size: 21px; font-weight: 700; }
-                ta := TouchArea { clicked => { root.chosen(i); } }
-            }
+            if root.title != "": Text { text: root.title; color: #FFFFFF; font-family: Ios.font; font-size: 19px; font-weight: 700; horizontal-alignment: center; wrap: word-wrap; }
+            for b[i] in root.buttons: GlossyButton { text: b; clicked => { root.chosen(i); } }
         }
     }
 }

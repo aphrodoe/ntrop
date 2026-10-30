@@ -1,72 +1,44 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
-import { AppState, Neon } from "../state.slint";
+import { AppState, Ios } from "../state.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { Pinstripe } from "../kit/pinstripe.slint";
+import { GroupedCell, GroupLabel } from "../kit/grouped_cell.slint";
+import { SlideConfirm } from "../kit/slide_confirm.slint";
 
-export component DoneScreen inherits VerticalLayout {
-    padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 2;
-    spacing: Theme.spacing-md;
-
-    Text {
-        text: "Backed up";
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-title;
-        font-weight: Theme.font-weight-semibold;
-        horizontal-alignment: center;
-    }
-    Text {
-        text: "Fingerprint " + AppState.fingerprint;
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
-    }
-    Text {
-        text: AppState.art;
-        color: Theme.palette-foreground;
-        font-family: "Source Code Pro";
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
-    }
-    Text {
-        text: "App buffers wiped";
-        color: Theme.palette-muted;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
-    }
-    if AppState.dice-run: Rectangle {
-        background: Neon.raised;
-        border-radius: Theme.spacing-md;
-        VerticalLayout {
-            padding: Theme.spacing-md;
-            spacing: Theme.spacing-sm;
-            Text {
-                text: "Verify on a laptop";
-                color: Theme.palette-foreground;
-                font-family: Theme.font-primary;
-                font-size: Theme.font-size-body;
-                font-weight: Theme.font-weight-semibold;
-            }
-            Text {
-                text: "echo -n \"<your rolls>\" | sha256sum";
-                color: Theme.palette-foreground;
-                font-family: "Source Code Pro";
-                font-size: Theme.font-size-label;
-                wrap: word-wrap;
-            }
-            Text {
-                text: (AppState.dice-words == 24 ? "All 64 hex characters are the entropy." : "The first 32 hex characters are the entropy.") + " Convert that entropy to BIP39 with an offline tool.";
-                color: Theme.palette-muted;
-                font-family: Theme.font-primary;
-                font-size: Theme.font-size-label;
-                wrap: word-wrap;
+export component DoneScreen inherits Pinstripe {
+    // Home and the slider both leave through the same wipe path (back-home and finish).
+    NavBar { y: 40px; width: root.width; title: "Backed up"; back-label: "Home"; back => { AppState.back-home(); } }
+    VerticalLayout {
+        y: 104px; height: root.height - 104px;
+        padding: 18px; padding-bottom: 28px;
+        spacing: 0;
+        GroupedCell { first: true; last: true; label: "Fingerprint"; detail: AppState.fingerprint; }
+        Rectangle { height: 12px; }
+        Rectangle {
+            height: art.preferred-height + 20px;
+            border-radius: 10px;
+            background: Ios.separator;
+            Rectangle {
+                x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
+                border-radius: 9px;
+                background: #FFFFFF;
+                art := Text { text: AppState.art; color: #000000; font-family: "Source Code Pro"; font-size: 16px; horizontal-alignment: center; vertical-alignment: center; }
             }
         }
+        Rectangle { height: 6px; }
+        GroupLabel { text: "App buffers wiped"; size: 15px; align: center; }
+        if AppState.dice-run: VerticalLayout {
+            padding-top: 12px;
+            spacing: 6px;
+            GroupLabel { text: "Verify on a laptop"; }
+            GroupedCell { first: true; last: true; mono: true; label: "echo -n \"<your rolls>\" | sha256sum"; }
+            GroupLabel {
+                text: (AppState.dice-words == 24 ? "All 64 hex characters are the entropy." : "The first 32 hex characters are the entropy.") + " Convert that entropy to BIP39 with an offline tool.";
+                size: 15px; weight: 400;
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+        SlideConfirm { text: "slide to wipe"; confirmed => { AppState.finish(); } }
     }
-    Rectangle { vertical-stretch: 1; }
-    Button { text: "Finish"; size: ControlSize.lg; full-width: true; clicked => { AppState.finish(); } }
 }

@@ -1,61 +1,58 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
-import { AppState } from "../state.slint";
+import { AppState, Ios } from "../state.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
+
+// Calculator-style glossy grey key.
+component DiceKey inherits Rectangle {
+    in property <int> face;
+    height: 120px;
+    Image {
+        width: parent.width; height: parent.height;
+        source: ta.pressed ? @image-url("../../resources/icons/key-on.svg", nine-slice(12)) : @image-url("../../resources/icons/key.svg", nine-slice(12));
+    }
+    Text { y: (parent.height - self.height) / 2 - 1px; text: root.face; color: #000000A6; font-family: Ios.font; font-size: 44px; font-weight: 700; }
+    Text { text: root.face; color: #FFFFFF; font-family: Ios.font; font-size: 44px; font-weight: 700; }
+    ta := TouchArea { clicked => { AppState.roll(root.face); } }
+}
 
 export component DiceScreen inherits Rectangle {
-    background: Theme.palette-background;
-
+    background: #000000;
+    NavBar { y: 40px; width: root.width; title: "Dice Duel"; back-label: "Home"; back => { AppState.back-home(); } }
     VerticalLayout {
-        padding: Theme.spacing-xl;
-        padding-top: Theme.spacing-xl * 2;
-        spacing: Theme.spacing-md;
-        Button {
-            vertical-stretch: 0;
-            text: "Home";
-            variant: ButtonVariant.ghost;
-            clicked => { AppState.back-home(); }
-        }
-        Text {
-            text: AppState.roll-count + " / " + AppState.rolls-needed;
-            color: Theme.palette-foreground;
-            font-family: Theme.font-primary;
-            font-size: Theme.font-size-title;
-            horizontal-alignment: center;
-        }
-        Text {
-            text: Math.round(AppState.dice-bits) + " bits";
-            color: Theme.palette-muted;
-            font-family: Theme.font-primary;
-            font-size: Theme.font-size-body;
-            horizontal-alignment: center;
-        }
-        Text {
-            text: AppState.rolls-text;
-            color: Theme.palette-foreground;
-            font-family: "Source Code Pro";
-            font-size: Theme.font-size-body;
-            horizontal-alignment: center;
+        y: 104px; height: root.height - 104px;
+        padding: 14px; padding-bottom: 24px;
+        spacing: 12px;
+        // display, like the calculator's grey-blue readout
+        Rectangle {
+            height: 150px;
+            border-radius: 8px;
+            background: #5B6370;
+            Rectangle {
+                x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px; border-radius: 6px;
+                background: #D9DFE6;
+                Rectangle { y: parent.height / 2; height: parent.height / 2 - 6px; x: 6px; width: parent.width - 12px; border-radius: 6px; background: #C6CED8; }
+            }
+            VerticalLayout {
+                padding: 12px;
+                spacing: 2px;
+                Text { text: AppState.roll-count + " / " + AppState.rolls-needed; color: #1C2430; font-family: Ios.font; font-size: 40px; font-weight: 700; horizontal-alignment: right; }
+                Text { text: Math.round(AppState.dice-bits) + " bits"; color: #3E4A5C; font-family: Ios.font; font-size: 18px; font-weight: 700; horizontal-alignment: right; }
+                Text { text: AppState.rolls-text; color: #1C2430; font-family: "Source Code Pro"; font-size: 18px; horizontal-alignment: right; }
+            }
         }
         GridLayout {
-            vertical-stretch: 1;
-            spacing: Theme.spacing-md;
-            Row { Button { text: "1"; size: ControlSize.lg; clicked => { AppState.roll(1); } } Button { text: "2"; size: ControlSize.lg; clicked => { AppState.roll(2); } } Button { text: "3"; size: ControlSize.lg; clicked => { AppState.roll(3); } } }
-            Row { Button { text: "4"; size: ControlSize.lg; clicked => { AppState.roll(4); } } Button { text: "5"; size: ControlSize.lg; clicked => { AppState.roll(5); } } Button { text: "6"; size: ControlSize.lg; clicked => { AppState.roll(6); } } }
-        }
-        Button {
             vertical-stretch: 0;
-            text: "Undo";
-            variant: ButtonVariant.ghost;
-            disabled: AppState.roll-count == 0;
-            clicked => { AppState.undo-roll(); }
+            spacing: 10px;
+            Row { DiceKey { face: 1; } DiceKey { face: 2; } DiceKey { face: 3; } }
+            Row { DiceKey { face: 4; } DiceKey { face: 5; } DiceKey { face: 6; } }
         }
-        Button {
-            vertical-stretch: 0;
-            text: "Done";
-            disabled: AppState.roll-count < AppState.rolls-needed;
-            clicked => { AppState.dice-done(); }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            spacing: 10px;
+            GlossyButton { text: "Undo"; enabled: AppState.roll-count > 0; clicked => { AppState.undo-roll(); } }
+            GlossyButton { text: "Done"; primary: true; enabled: AppState.roll-count >= AppState.rolls-needed; clicked => { AppState.dice-done(); } }
         }
     }
 }

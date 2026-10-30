@@ -3,31 +3,59 @@ import { Ios } from "../state.slint";
 
 // One row of a grouped table. The grey outer rect shows through as the group border and
 // the 1 px separator under each row; only the group's first and last rows round their corners.
+// `wrap` turns the label into wrapped body text; `mono` sets it in the monospace font.
 export component GroupedCell inherits Rectangle {
     in property <string> label;
     in property <string> detail;
     in property <bool> first: false;
     in property <bool> last: false;
-    callback clicked();
-    height: 64px + (root.first ? 1px : 0px);
+    in property <bool> wrap: false;
+    in property <bool> mono: false;
+    property <length> top: root.first ? 1px : 0px;
+    vertical-stretch: 0;
+    min-height: 64px + root.top;
+    preferred-height: max(64px, lay.preferred-height + 1px) + root.top;
     background: Ios.separator;
     border-top-left-radius: root.first ? 10px : 0;
     border-top-right-radius: root.first ? 10px : 0;
     border-bottom-left-radius: root.last ? 10px : 0;
     border-bottom-right-radius: root.last ? 10px : 0;
     Rectangle {
-        x: 1px; y: root.first ? 1px : 0; width: parent.width - 2px; height: 63px;
-        background: ta.pressed ? #2E6BE6 : #FFFFFF;
+        x: 1px; y: root.top; width: parent.width - 2px; height: parent.height - root.top - 1px;
+        background: #FFFFFF;
         border-top-left-radius: root.first ? 9px : 0;
         border-top-right-radius: root.first ? 9px : 0;
         border-bottom-left-radius: root.last ? 9px : 0;
         border-bottom-right-radius: root.last ? 9px : 0;
-        HorizontalLayout {
-            padding-left: 16px; padding-right: 16px; spacing: 12px;
-            Text { vertical-alignment: center; text: root.label; color: ta.pressed ? #FFFFFF : Ios.label; font-family: Ios.font; font-size: 20px; font-weight: 700; overflow: elide; }
-            Text { horizontal-stretch: 1; vertical-alignment: center; horizontal-alignment: right; text: root.detail; color: ta.pressed ? #FFFFFF : Ios.detail; font-family: Ios.font; font-size: 19px; overflow: elide; }
+        lay := HorizontalLayout {
+            padding-left: 16px; padding-right: 16px; padding-top: 12px; padding-bottom: 12px; spacing: 12px;
+            Text {
+                horizontal-stretch: root.detail == "" ? 1 : 0;
+                vertical-alignment: center;
+                text: root.label; color: Ios.label;
+                font-family: root.mono ? "Source Code Pro" : Ios.font;
+                font-size: root.mono ? 15px : root.wrap ? 17px : 20px;
+                font-weight: root.wrap || root.mono ? 400 : 700;
+                wrap: root.wrap || root.mono ? word-wrap : no-wrap;
+                overflow: root.wrap || root.mono ? clip : elide;
+            }
+            if root.detail != "": Text {
+                horizontal-stretch: 1; vertical-alignment: center; horizontal-alignment: right;
+                text: root.detail; color: Ios.detail; font-family: Ios.font; font-size: 18px; overflow: elide;
+            }
         }
-        ta := TouchArea { clicked => { root.clicked(); } }
     }
-    @children
+}
+
+// Section header or footer on a grouped table: grey-blue bold with a white 1 px shadow below.
+export component GroupLabel inherits Rectangle {
+    in property <string> text;
+    in property <color> tone: #4C566C;
+    in property <length> size: 17px;
+    in property <int> weight: 700;
+    in property <TextHorizontalAlignment> align: left;
+    vertical-stretch: 0;
+    preferred-height: t.preferred-height + 1px;
+    Text { x: 10px; y: 1px; width: parent.width - 20px; text: root.text; color: #FFFFFFB3; font-family: Ios.font; font-size: root.size; font-weight: root.weight; wrap: word-wrap; horizontal-alignment: root.align; }
+    t := Text { x: 10px; y: 0; width: parent.width - 20px; text: root.text; color: root.tone; font-family: Ios.font; font-size: root.size; font-weight: root.weight; wrap: word-wrap; horizontal-alignment: root.align; }
 }

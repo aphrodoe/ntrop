@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme } from "@ui/theme.slint";
-import { Sheet } from "@ui/sheet.slint";
 import { AppState, Ios } from "../state.slint";
 import { GlossyIcon } from "../kit/glossy_icon.slint";
 import { Segmented } from "../kit/segmented.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { Pinstripe } from "../kit/pinstripe.slint";
+import { GroupedCell } from "../kit/grouped_cell.slint";
 
 // iPhone OS 1 homage: a 4-column icon grid on black and a 4-slot dock.
 export component HomeScreen inherits Rectangle {
@@ -47,17 +48,20 @@ export component HomeScreen inherits Rectangle {
         GlossyIcon { x: 354px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/die.svg"); label: "Dice"; tint: #C42A2A; clicked => { AppState.start-dice(root.words); } }
     }
 
-    Sheet {
-        width: parent.width;
-        height: parent.height;
-        open <=> root.help;
-        Text { text: "How it works"; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-title; font-weight: Theme.font-weight-semibold; }
-        for line in [
-            "We mix your chaos with the chip's randomness: SHA-256(chip + you).",
-            "Even if you play badly, it's never weaker than the chip.",
-            "Credits are conservative estimates; stale input is rejected live.",
-            "Outguess, Static Hunt, Glitch Glider and Shard Stack only pay for what the machine can't predict.",
-            "Dice Duel uses only your dice, so you can verify it on a laptop."
-        ]: Text { text: line; color: Theme.palette-foreground; font-family: Theme.font-primary; font-size: Theme.font-size-body; wrap: word-wrap; }
+    if root.help: Pinstripe {
+        NavBar { y: 40px; width: parent.width; title: "How it works"; back-label: "Home"; back => { root.help = false; } }
+        VerticalLayout {
+            y: 104px; height: parent.height - 104px;
+            padding: 18px; padding-top: 22px;
+            property <[string]> lines: [
+                "We mix your chaos with the chip's randomness: SHA-256(chip + you).",
+                "Even if you play badly, it's never weaker than the chip.",
+                "Credits are conservative estimates; stale input is rejected live.",
+                "Outguess, Static Hunt, Glitch Glider and Shard Stack only pay for what the machine can't predict.",
+                "Dice Duel uses only your dice, so you can verify it on a laptop."
+            ];
+            for line[i] in self.lines: GroupedCell { first: i == 0; last: i == 4; wrap: true; label: line; }
+            Rectangle { vertical-stretch: 1; }
+        }
     }
 }

@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: MIT
+import { Ios } from "../state.slint";
+
+// Glossy pill button (58 px): grey by default, blue when `primary` or pressed.
+export component GlossyButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary: false;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: 58px;
+    opacity: root.enabled ? 1 : 0.45;
+    property <bool> blue: root.primary || (ta.pressed && root.enabled);
+    Image {
+        width: parent.width; height: 58px;
+        source: root.blue ? @image-url("../../resources/icons/sheet-button-on.svg", nine-slice(12)) : @image-url("../../resources/icons/sheet-button.svg", nine-slice(12));
+    }
+    if root.blue: Text { y: (parent.height - self.height) / 2 - 1px; text: root.text; color: #00000059; font-family: Ios.font; font-size: 21px; font-weight: 700; }
+    Text { text: root.text; color: root.blue ? #FFFFFF : #1A1A1A; font-family: Ios.font; font-size: 21px; font-weight: 700; }
+    if root.primary && ta.pressed: Rectangle { border-radius: 12px; background: #00000040; }
+    ta := TouchArea { enabled: root.enabled; clicked => { root.clicked(); } }
+}

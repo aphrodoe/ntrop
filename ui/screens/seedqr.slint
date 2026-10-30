@@ -1,32 +1,30 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
-import { AppState } from "../state.slint";
+import { AppState, Ios } from "../state.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { Pinstripe } from "../kit/pinstripe.slint";
+import { GroupLabel } from "../kit/grouped_cell.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
 
-export component SeedQrScreen inherits VerticalLayout {
-    padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 2;
-    spacing: Theme.spacing-md;
-
-    Text {
-        text: "SeedQR";
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-title;
-        font-weight: Theme.font-weight-semibold;
-        horizontal-alignment: center;
+export component SeedQrScreen inherits Pinstripe {
+    NavBar { y: 40px; width: root.width; title: "SeedQR"; back-label: "Home"; back => { AppState.back-home(); } }
+    VerticalLayout {
+        y: 104px; height: root.height - 104px;
+        padding: 18px; padding-bottom: 28px;
+        spacing: 10px;
+        GroupLabel { text: "Scan with an offline wallet. Never photograph it."; tone: #A3171D; align: center; }
+        Rectangle {
+            height: 424px;
+            border-radius: 10px;
+            background: Ios.separator;
+            Rectangle {
+                x: 1px; y: 1px; width: parent.width - 2px; height: parent.height - 2px;
+                border-radius: 9px;
+                background: #FFFFFF;
+                Image { y: 12px; height: 400px; width: parent.width; source: AppState.qr; image-fit: contain; image-rendering: pixelated; }
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+        GlossyButton { primary: true; text: "Quiz me"; clicked => { AppState.start-quiz(); } }
     }
-    Text {
-        text: "Scan with an offline wallet. Never photograph it.";
-        wrap: word-wrap;
-        color: Theme.palette-danger;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
-    }
-    Image { source: AppState.qr; image-fit: contain; image-rendering: pixelated; horizontal-stretch: 0; height: 400px; }
-    Rectangle { vertical-stretch: 1; }
-    Button { text: "Home"; size: ControlSize.md; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
-    Button { text: "Quiz me"; size: ControlSize.lg; full-width: true; clicked => { AppState.start-quiz(); } }
 }

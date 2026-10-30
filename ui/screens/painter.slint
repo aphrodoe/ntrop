@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
+import { Theme } from "@ui/theme.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
 import { AppState, Neon } from "../state.slint";
 import { Toast, ToastVariant } from "@ui/toast.slint";
 import { Meter } from "../widgets/meter.slint";
@@ -49,22 +50,15 @@ export component PainterScreen inherits Rectangle {
         horizontal-alignment: center;
     }
     VerticalLayout {
-        y: Theme.spacing-xl * 2;
+        y: 116px;
         height: 90px;
         x: Theme.spacing-xl;
         width: parent.width - Theme.spacing-xl * 2;
         Meter { }
     }
-    Button {
-        x: Theme.spacing-xl;
-        y: Theme.spacing-xl * 2 + 90px;
-        text: "Home";
-        variant: ButtonVariant.ghost;
-        clicked => { AppState.back-home(); }
-    }
     if AppState.camera-on: Image {
         x: parent.width - Theme.spacing-xl - 96px;
-        y: Theme.spacing-xl * 2 + 90px;
+        y: 206px;
         width: 96px;
         height: 96px;
         source: AppState.camera-preview;
@@ -72,7 +66,7 @@ export component PainterScreen inherits Rectangle {
     }
     if AppState.camera-note != "": Text {
         x: parent.width / 2;
-        y: Theme.spacing-xl * 2 + 90px;
+        y: 206px;
         text: AppState.camera-note;
         color: Theme.palette-danger;
         font-family: Theme.font-primary;
@@ -85,21 +79,17 @@ export component PainterScreen inherits Rectangle {
         variant: ToastVariant.error;
         message: "Touch rejected: keep moving";
     }
-    HorizontalLayout {
+    GlossyButton {
         x: Theme.spacing-xl;
-        height: 64px;
         y: parent.height - self.height - Theme.spacing-xl;
         width: parent.width - Theme.spacing-xl * 2;
-        spacing: Theme.spacing-md;
-        Button {
-            text: AppState.camera-on ? "Camera: on" : "Camera: off";
-            variant: ButtonVariant.secondary;
-            clicked => { AppState.toggle-camera(); }
-        }
-        Button {
-            text: "Done";
-            disabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits < AppState.target-bits;
-            clicked => { AppState.painter-done(); }
-        }
+        text: AppState.camera-on ? "Camera: on" : "Camera: off";
+        clicked => { AppState.toggle-camera(); }
+    }
+    NavBar {
+        y: 40px; width: root.width; title: "Chaos Painter"; back-label: "Home"; right-label: "Done";
+        right-enabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;
+        back => { AppState.back-home(); }
+        right => { AppState.painter-done(); }
     }
 }

@@ -1,44 +1,30 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
 import { AppState } from "../state.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { Pinstripe } from "../kit/pinstripe.slint";
+import { GroupedCell, GroupLabel } from "../kit/grouped_cell.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
 
-export component WordsScreen inherits VerticalLayout {
-    padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 2;
-    spacing: Theme.spacing-md;
-
-    Text {
-        text: "Your seed words";
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-title;
-        font-weight: Theme.font-weight-semibold;
-        horizontal-alignment: center;
+export component WordsScreen inherits Pinstripe {
+    NavBar { y: 40px; width: root.width; title: "Your seed words"; back-label: "Home"; back => { AppState.back-home(); } }
+    VerticalLayout {
+        y: 104px; height: root.height - 104px;
+        padding: 18px; padding-bottom: 28px;
+        spacing: 0;
+        GroupLabel { text: "Write these down. Never photograph them."; tone: #A3171D; }
+        Rectangle { height: 10px; }
+        for w[i] in AppState.page-words: GroupedCell {
+            first: i == 0; last: i == AppState.page-words.length - 1;
+            label: (AppState.first-index + i) + ". " + w;
+        }
+        Rectangle { height: 10px; }
+        GroupLabel { text: (AppState.page + 1) + " / " + AppState.page-count; align: center; }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            spacing: 12px;
+            if AppState.page > 0: GlossyButton { text: "Back"; clicked => { AppState.prev-page(); } }
+            GlossyButton { primary: true; text: AppState.page + 1 < AppState.page-count ? "Next" : "Show SeedQR"; clicked => { AppState.next-page(); } }
+        }
     }
-    Text {
-        text: "Write these down. Never photograph them.";
-        wrap: word-wrap;
-        color: Theme.palette-danger;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
-    }
-    for w[i] in AppState.page-words: Text {
-        text: (AppState.first-index + i) + ". " + w;
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-title;
-    }
-    Rectangle { vertical-stretch: 1; }
-    Text {
-        text: (AppState.page + 1) + " / " + AppState.page-count;
-        color: Theme.palette-muted;
-        font-family: Theme.font-primary;
-        horizontal-alignment: center;
-    }
-    Button { text: "Home"; size: ControlSize.md; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
-    if AppState.page > 0: Button { text: "Back"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.prev-page(); } }
-    Button { text: AppState.page + 1 < AppState.page-count ? "Next" : "Show SeedQR"; size: ControlSize.lg; full-width: true; clicked => { AppState.next-page(); } }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
+import { Theme } from "@ui/theme.slint";
+import { NavBar } from "../kit/nav_bar.slint";
 import { AppState, Neon } from "../state.slint";
 import { Meter } from "../widgets/meter.slint";
 
@@ -10,23 +10,9 @@ export component HuntScreen inherits Rectangle {
 
     VerticalLayout {
         padding: Theme.spacing-xl;
-        padding-top: Theme.spacing-xl * 2;
+        padding-top: 116px;
         spacing: Theme.spacing-md;
         Meter { vertical-stretch: 0; }
-        HorizontalLayout {
-            vertical-stretch: 0;
-            spacing: Theme.spacing-md;
-            Button {
-                text: "Home";
-                variant: ButtonVariant.ghost;
-                clicked => { AppState.back-home(); }
-            }
-            Button {
-                text: "Done";
-                disabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits < AppState.target-bits;
-                clicked => { AppState.painter-done(); }
-            }
-        }
         Text {
             text: AppState.game-healthy ? "Drag to look. Tap the ghosts." : "Shots too samey: vary your aim";
             color: AppState.game-healthy ? Theme.palette-muted : Theme.palette-danger;
@@ -69,5 +55,11 @@ export component HuntScreen inherits Rectangle {
                 }
             }
         }
+    }
+    NavBar {
+        y: 40px; width: root.width; title: "Static Hunt"; back-label: "Home"; right-label: "Done";
+        right-enabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;
+        back => { AppState.back-home(); }
+        right => { AppState.painter-done(); }
     }
 }

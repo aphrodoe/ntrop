@@ -1,29 +1,25 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
-import { Card } from "@ui/card.slint";
 import { AppState } from "../state.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { Pinstripe } from "../kit/pinstripe.slint";
+import { GroupedCell, GroupLabel } from "../kit/grouped_cell.slint";
+import { SlideConfirm } from "../kit/slide_confirm.slint";
 
-export component SummaryScreen inherits VerticalLayout {
-    padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 3;
-    spacing: Theme.spacing-lg;
-
-    Text {
-        text: "Entropy collected";
-        color: Theme.palette-foreground;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-title;
-        font-weight: Theme.font-weight-semibold;
-        horizontal-alignment: center;
+export component SummaryScreen inherits Pinstripe {
+    NavBar { y: 40px; width: root.width; title: "Entropy collected"; back-label: "Home"; back => { AppState.back-home(); } }
+    VerticalLayout {
+        y: 104px; height: root.height - 104px;
+        padding: 18px; padding-top: 22px; padding-bottom: 28px;
+        spacing: 0;
+        // Deliberate: rows for sources that credited nothing this run are hidden (Touch always shows).
+        GroupedCell { first: true; last: AppState.camera-bits == 0 && AppState.game-bits == 0; label: "Touch"; detail: AppState.touch-bits + " bits (conservative estimate)"; }
+        if AppState.camera-bits > 0: GroupedCell { last: AppState.game-bits == 0; label: "Camera"; detail: AppState.camera-bits + " bits (conservative estimate)"; }
+        if AppState.game-bits > 0: GroupedCell { last: true; label: "Game skill"; detail: AppState.game-bits + " bits (conservative estimate)"; }
+        Rectangle { height: 22px; }
+        GroupedCell { first: true; last: true; label: "+ hardware 256"; }
+        GroupLabel { text: "Mixed in from the device TRNG"; size: 15px; weight: 400; align: center; }
+        Rectangle { vertical-stretch: 1; }
+        SlideConfirm { text: "slide to generate"; confirmed => { AppState.generate(); } }
     }
-    Card { title: "Touch"; body: AppState.touch-bits + " bits (conservative estimate)"; }
-    // Deliberate: rows for sources that credited nothing this run are hidden (Touch always shows).
-    if AppState.camera-bits > 0: Card { title: "Camera"; body: AppState.camera-bits + " bits (conservative estimate)"; }
-    if AppState.game-bits > 0: Card { title: "Game skill"; body: AppState.game-bits + " bits (conservative estimate)"; }
-    Card { title: "+ hardware 256"; body: "Mixed in from the device TRNG"; }
-    Rectangle { vertical-stretch: 1; }
-    Button { text: "Home"; size: ControlSize.lg; full-width: true; variant: ButtonVariant.secondary; clicked => { AppState.back-home(); } }
-    Button { text: "Generate"; size: ControlSize.lg; full-width: true; clicked => { AppState.generate(); } }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
+import { Theme } from "@ui/theme.slint";
+import { NavBar } from "../kit/nav_bar.slint";
 import { AppState, Neon } from "../state.slint";
 import { Meter } from "../widgets/meter.slint";
 
@@ -30,15 +30,9 @@ export component OutguessScreen inherits Rectangle {
 
     VerticalLayout {
         padding: Theme.spacing-xl;
-        padding-top: Theme.spacing-xl * 2;
+        padding-top: 116px;
         spacing: Theme.spacing-md;
         Meter { vertical-stretch: 0; }
-        Button {
-            vertical-stretch: 0;
-            text: "Home";
-            variant: ButtonVariant.ghost;
-            clicked => { AppState.back-home(); }
-        }
         Text {
             text: !root.picked ? "Pick a door. The machine is trying to read you." : AppState.game-healthy ? "Machine guessed " + (AppState.last-guess + 1) + (AppState.last-hit ? " · HIT" : " · MISS") + " · " + AppState.last-credit : "READ YOU · +0";
             color: root.picked && !AppState.game-healthy ? Theme.palette-danger : Theme.palette-foreground;
@@ -60,11 +54,11 @@ export component OutguessScreen inherits Rectangle {
             Row { Door { index: 0; } Door { index: 1; } }
             Row { Door { index: 2; } Door { index: 3; } }
         }
-        Button {
-            vertical-stretch: 0;
-            text: "Done";
-            disabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits < AppState.target-bits;
-            clicked => { AppState.painter-done(); }
-        }
+    }
+    NavBar {
+        y: 40px; width: root.width; title: "Outguess"; back-label: "Home"; right-label: "Done";
+        right-enabled: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;
+        back => { AppState.back-home(); }
+        right => { AppState.painter-done(); }
     }
 }

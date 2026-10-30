@@ -1,22 +1,29 @@
 // SPDX-License-Identifier: MIT
 
-import { Theme, ControlSize } from "@ui/theme.slint";
-import { Button } from "@ui/button.slint";
-import { AppState } from "../state.slint";
+import { AppState, Ios } from "../state.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
 
-export component ErrorScreen inherits VerticalLayout {
-    padding: Theme.spacing-xl;
-    padding-top: Theme.spacing-xl * 3;
-    spacing: Theme.spacing-lg;
-
-    Text {
-        text: AppState.error-text;
-        wrap: word-wrap;
-        color: Theme.palette-danger;
-        font-family: Theme.font-primary;
-        font-size: Theme.font-size-body;
-        horizontal-alignment: center;
+// iPhone OS 1 style alert: a rounded dark-blue translucent panel with a white rim and gloss.
+export component ErrorScreen inherits Rectangle {
+    background: #000000;
+    Rectangle {
+        x: 30px; width: 420px; // fixed so the 416 px gloss fits exactly
+        y: (root.height - self.height) / 2;
+        height: lay.preferred-height;
+        border-radius: 12px;
+        background: #E8ECF4;
+        Rectangle {
+            x: 2px; y: 2px; width: parent.width - 4px; height: parent.height - 4px;
+            border-radius: 10px;
+            background: #1A2F6BE6;
+            Image { width: 416px; height: 48px; source: @image-url("../../resources/icons/alert-gloss.svg"); }
+        }
+        lay := VerticalLayout {
+            padding: 22px;
+            spacing: 14px;
+            Text { text: "Something went wrong"; color: #FFFFFF; font-family: Ios.font; font-size: 21px; font-weight: 700; horizontal-alignment: center; }
+            Text { text: AppState.error-text; color: #FFFFFF; font-family: Ios.font; font-size: 17px; wrap: word-wrap; horizontal-alignment: center; }
+            GlossyButton { text: "Home"; clicked => { AppState.back-home(); } }
+        }
     }
-    Rectangle { vertical-stretch: 1; }
-    Button { text: "Home"; size: ControlSize.lg; full-width: true; clicked => { AppState.back-home(); } }
 }
