@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__passport-drive__samba_init_flash",
+      "mcp__passport-drive__samba_write_flash",
+      "mcp__passport-drive__samba_write_u32",
+      "mcp__passport-drive__reboot_to_samba",
+      "mcp__passport-drive__install_certificate",
+      "mcp__passport-sim__samba_init_flash",
+      "mcp__passport-sim__samba_write_flash",
+      "mcp__passport-sim__samba_write_u32",
+      "mcp__passport-sim__reboot_to_samba"
+    ]
+  }
+}

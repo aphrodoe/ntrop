@@ -1,0 +1,5 @@
+target/
+.foundation-sdk/
+ui/ui
+manifest.toml
+.superpowers/
