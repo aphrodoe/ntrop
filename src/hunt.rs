@@ -4,7 +4,7 @@
 use slint_keyos_platform::slint::{Rgb8Pixel, SharedPixelBuffer};
 
 pub const W: u32 = 240;
-pub const H: u32 = 320;
+pub const H: u32 = 288;
 const FOV: f32 = 60.0 * std::f32::consts::PI / 180.0;
 const DEG_PER_PX: f32 = 0.5;
 const SPAWN_DIST: f32 = 8.0;

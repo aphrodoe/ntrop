@@ -324,7 +324,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         // View is 240x320 shown at 2x; the area is centred, so x is already relative to the image.
         let Some((dx, dy)) = h.borrow_mut().tap((x / 2.0) as i32, (y / 2.0) as i32) else { return };
         let t_us = start.elapsed().as_micros() as u64;
-        let r = s.borrow_mut().on_shot(dx, dy, t_us);
+        let r = s.borrow_mut().on_shot((x / 2.0) as i32, (y / 2.0) as i32, dx, dy, t_us);
         if r != SampleResult::Uncredited {
             credit(&ui, &s.borrow(), &f);
         }
