@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: MIT
+
+import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
+import { Button } from "@ui/button.slint";
+import { AppState } from "../state.slint";
+
+export component DiceScreen inherits Rectangle {
+    background: Theme.palette-background;
+
+    VerticalLayout {
+        padding: Theme.spacing-xl;
+        padding-top: Theme.spacing-xl * 2;
+        spacing: Theme.spacing-md;
+        Button {
+            vertical-stretch: 0;
+            text: "Home";
+            variant: ButtonVariant.ghost;
+            clicked => { AppState.back-home(); }
+        }
+        Text {
+            text: AppState.roll-count + " / " + AppState.rolls-needed;
+            color: Theme.palette-foreground;
+            font-family: Theme.font-primary;
+            font-size: Theme.font-size-title;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: Math.round(AppState.dice-bits) + " bits";
+            color: Theme.palette-muted;
+            font-family: Theme.font-primary;
+            font-size: Theme.font-size-body;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: AppState.rolls-text;
+            color: Theme.palette-foreground;
+            font-family: "Source Code Pro";
+            font-size: Theme.font-size-body;
+            horizontal-alignment: center;
+        }
+        GridLayout {
+            vertical-stretch: 1;
+            spacing: Theme.spacing-md;
+            Row { Button { text: "1"; size: ControlSize.lg; clicked => { AppState.roll(1); } } Button { text: "2"; size: ControlSize.lg; clicked => { AppState.roll(2); } } Button { text: "3"; size: ControlSize.lg; clicked => { AppState.roll(3); } } }
+            Row { Button { text: "4"; size: ControlSize.lg; clicked => { AppState.roll(4); } } Button { text: "5"; size: ControlSize.lg; clicked => { AppState.roll(5); } } Button { text: "6"; size: ControlSize.lg; clicked => { AppState.roll(6); } } }
+        }
+        Button {
+            vertical-stretch: 0;
+            text: "Undo";
+            variant: ButtonVariant.ghost;
+            disabled: AppState.roll-count == 0;
+            clicked => { AppState.undo-roll(); }
+        }
+        Button {
+            vertical-stretch: 0;
+            text: "Done";
+            disabled: AppState.roll-count < AppState.rolls-needed;
+            clicked => { AppState.dice-done(); }
+        }
+    }
+}

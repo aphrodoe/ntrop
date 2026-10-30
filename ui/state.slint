@@ -29,6 +29,16 @@ export global AppState {
 
     callback start-arcade(int /* 12 | 24 */, int /* game: 0 painter, 1 outguess, 2 hunt */);
     callback start-dice(int);
+    // Dice Duel: rolls-text is masked ("•••• 1 5"), never the full rolls
+    in property <int> roll-count;
+    in property <int> rolls-needed: 50;
+    in property <float> dice-bits;
+    in property <string> rolls-text;
+    in property <bool> dice-run;
+    in property <int> dice-words: 12;
+    callback roll(int);
+    callback undo-roll();
+    callback dice-done();
     callback pick-door(int, length, length);
     in property <int> last-guess: -1;
     in property <bool> last-hit;

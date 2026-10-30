@@ -47,6 +47,21 @@ fn clear_secrets(st: &AppState) {
     st.set_last_guess(-1);
     st.set_last_credit(SharedString::new());
     st.set_read_pct(0);
+    st.set_rolls_text(SharedString::new());
+    st.set_roll_count(0);
+    st.set_dice_bits(0.0);
+    st.set_dice_run(false);
+}
+
+/// Dice counters plus the masked rolls ("•••• 1 5": only the last two rolls show).
+fn sync_dice(st: &AppState, s: &Session) {
+    let r = s.rolls();
+    let mut t = if r.len() > 2 { "•••• ".to_string() } else { String::new() };
+    t.push_str(&r[r.len().saturating_sub(2)..].iter().map(|d| d.to_string()).collect::<Vec<_>>().join(" "));
+    st.set_rolls_text(SharedString::from(t.as_str()));
+    st.set_roll_count(r.len() as i32);
+    st.set_rolls_needed(s.rolls_needed() as i32);
+    st.set_dice_bits(r.len() as f32 * 2.585);
 }
 
 fn strs(v: &[String]) -> ModelRc<SharedString> {
@@ -219,6 +234,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         t.set_vec(Vec::new());
         sync_meter(&ui, &s.borrow());
         let st = ui.global::<AppState>();
+        st.set_dice_run(false);
         st.set_last_guess(-1);
         st.set_last_hit(false);
         st.set_last_credit(SharedString::new());
@@ -257,10 +273,47 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         }
     });
 
-    let u = ui.as_weak();
-    st.on_start_dice(move |_| {
-        // Dice Duel is built in Task 9.
-        u.upgrade().unwrap().global::<AppState>().set_screen(Screen::Dice);
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_start_dice(move |n| {
+        let wc = if n == 24 { WordCount::TwentyFour } else { WordCount::Twelve };
+        s.borrow_mut().start_dice(wc);
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        sync_dice(&st, &s.borrow());
+        st.set_dice_run(true);
+        st.set_dice_words(if n == 24 { 24 } else { 12 });
+        st.set_screen(Screen::Dice);
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_roll(move |r| {
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        if (1..=6).contains(&r) && s.borrow_mut().push_roll(r as u8) {
+            sync_dice(&st, &s.borrow());
+        }
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_undo_roll(move || {
+        s.borrow_mut().pop_roll();
+        let ui = u.upgrade().unwrap();
+        sync_dice(&ui.global::<AppState>(), &s.borrow());
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_dice_done(move || {
+        let ui = u.upgrade().unwrap();
+        let st = ui.global::<AppState>();
+        let r = s.borrow_mut().generate_from_dice();
+        sync_dice(&st, &s.borrow()); // rolls are cleared on success, so the masked text empties
+        match r {
+            Ok(()) => show_words(&st, &s.borrow()),
+            Err(e) => {
+                st.set_error_text(SharedString::from(e.as_str()));
+                st.set_screen(Screen::Error);
+            }
+        }
     });
 
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
@@ -321,7 +374,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
             gs.drag = false;
             return;
         }
-        // View is 240x320 shown at 2x; the area is centred, so x is already relative to the image.
+        // View is 240x288 shown at 2x; the area is centred, so x is already relative to the image.
         let Some((dx, dy)) = h.borrow_mut().tap((x / 2.0) as i32, (y / 2.0) as i32) else { return };
         let t_us = start.elapsed().as_micros() as u64;
         let r = s.borrow_mut().on_shot((x / 2.0) as i32, (y / 2.0) as i32, dx, dy, t_us);

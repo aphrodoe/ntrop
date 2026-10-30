@@ -3,7 +3,7 @@
 use zeroize::Zeroizing;
 
 use crate::{
-    master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, EntropyPool, QuizQuestion, SampleResult, WordCount,
+    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, EntropyPool, QuizQuestion, SampleResult, WordCount,
 };
 
 pub struct Session {
@@ -15,6 +15,7 @@ pub struct Session {
     quiz: Vec<QuizQuestion>,
     step: usize,
     oracle: Oracle,
+    rolls: Zeroizing<Vec<u8>>,
 }
 
 pub const WORDS_PER_PAGE: usize = 6;
@@ -29,7 +30,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default() }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), rolls: Zeroizing::new(Vec::new()) }
     }
 }
 
@@ -82,6 +83,41 @@ impl Session {
         Ok(())
     }
 
+    pub fn start_dice(&mut self, wc: WordCount) {
+        self.wipe();
+        self.wc = wc;
+    }
+
+    /// Accepts only 1..=6; returns false (and stores nothing) otherwise.
+    pub fn push_roll(&mut self, r: u8) -> bool {
+        let ok = (1..=6).contains(&r) && self.rolls.len() < 255;
+        if ok {
+            self.rolls.push(r);
+        }
+        ok
+    }
+
+    pub fn pop_roll(&mut self) {
+        self.rolls.pop();
+    }
+
+    pub fn rolls(&self) -> &[u8] {
+        &self.rolls
+    }
+
+    pub fn rolls_needed(&self) -> usize {
+        crate::min_rolls(self.wc)
+    }
+
+    /// Seed = SHA-256 of the rolls; no hardware RNG. The rolls are cleared once the seed exists.
+    pub fn generate_from_dice(&mut self) -> Result<(), String> {
+        let entropy = dice_entropy(&self.rolls, self.wc).map_err(|e| format!("{e:?}"))?;
+        self.words = words(&entropy);
+        self.entropy = Some(entropy);
+        self.rolls = Zeroizing::new(Vec::new());
+        Ok(())
+    }
+
     pub fn words(&self) -> &[String] {
         &self.words
     }
@@ -97,6 +133,7 @@ impl Session {
         self.quiz = Vec::new(); // QuizQuestion zeroizes on drop
         self.step = 0;
         self.oracle.wipe();
+        self.rolls = Zeroizing::new(Vec::new());
     }
 
     pub fn page(&self) -> usize {
@@ -212,6 +249,18 @@ mod tests {
         assert!(s.pool().unwrap().game_bits() > 0);
     }
     #[test] fn on_shot_feeds_pool() { let mut s = Session::new(); assert_eq!(s.on_shot(0, 0, 1, 2, 0), SampleResult::Uncredited); s.start_arcade(WordCount::Twelve); s.on_shot(5, 5, 1, 2, 0); s.on_shot(9, 12, 4, 7, 1); assert_eq!(s.pool().unwrap().game_bits(), 1); }
+    #[test] fn dice_session_matches_core() {
+        let r: Vec<u8> = "12345612345612345612345612345612345612345612345612".bytes().map(|b| b - b'0').collect();
+        let mut s = Session::new(); s.start_dice(WordCount::Twelve);
+        assert!(!s.push_roll(7) && !s.push_roll(0));
+        for &x in &r[..49] { assert!(s.push_roll(x)); }
+        assert!(s.generate_from_dice().is_err() && s.words().is_empty());
+        assert!(s.push_roll(r[49]));
+        s.generate_from_dice().unwrap();
+        assert_eq!(s.words(), &*words(&dice_entropy(&r, WordCount::Twelve).unwrap()));
+        assert!(s.rolls().is_empty());
+        s.push_roll(1); s.wipe(); assert!(s.rolls().is_empty() && s.words().is_empty());
+    }
     #[test] fn fingerprint_matches_entropy() {
         let s = gen();
         let e = s.entropy.as_ref().unwrap();

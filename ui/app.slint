@@ -13,6 +13,7 @@ import { WordsScreen } from "screens/words.slint";
 import { SeedQrScreen } from "screens/seedqr.slint";
 import { QuizScreen } from "screens/quiz.slint";
 import { DoneScreen } from "screens/done.slint";
+import { DiceScreen } from "screens/dice.slint";
 import { ErrorScreen } from "screens/error.slint";
 
 export { AppState, Screen, TrailDot, Theme, Images, ControlSize }
@@ -32,19 +33,5 @@ export component AppWindow inherits Window {
     if AppState.screen == Screen.seedqr: SeedQrScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.quiz: QuizScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.done: DoneScreen { width: parent.width; height: parent.height; }
-    // Dice Duel arrives in Task 9.
-    if AppState.screen == Screen.dice: VerticalLayout {
-        width: parent.width;
-        height: parent.height;
-        padding: Theme.spacing-xl;
-        Text {
-            text: "Dice Duel (Task 9)";
-            color: Theme.palette-foreground;
-            font-family: Theme.font-primary;
-            horizontal-alignment: center;
-            vertical-stretch: 1;
-            vertical-alignment: center;
-        }
-        Button { text: "Home"; size: ControlSize.lg; full-width: true; clicked => { AppState.back-home(); } }
-    }
+    if AppState.screen == Screen.dice: DiceScreen { width: parent.width; height: parent.height; }
 }

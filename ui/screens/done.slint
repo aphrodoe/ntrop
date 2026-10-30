@@ -2,7 +2,7 @@
 
 import { Theme, ControlSize, ButtonVariant } from "@ui/theme.slint";
 import { Button } from "@ui/button.slint";
-import { AppState } from "../state.slint";
+import { AppState, Neon } from "../state.slint";
 
 export component DoneScreen inherits VerticalLayout {
     padding: Theme.spacing-xl;
@@ -37,6 +37,35 @@ export component DoneScreen inherits VerticalLayout {
         font-family: Theme.font-primary;
         font-size: Theme.font-size-body;
         horizontal-alignment: center;
+    }
+    if AppState.dice-run: Rectangle {
+        background: Neon.raised;
+        border-radius: Theme.spacing-md;
+        VerticalLayout {
+            padding: Theme.spacing-md;
+            spacing: Theme.spacing-sm;
+            Text {
+                text: "Verify on a laptop";
+                color: Theme.palette-foreground;
+                font-family: Theme.font-primary;
+                font-size: Theme.font-size-body;
+                font-weight: Theme.font-weight-semibold;
+            }
+            Text {
+                text: "echo -n \"<your rolls>\" | sha256sum";
+                color: Theme.palette-foreground;
+                font-family: "Source Code Pro";
+                font-size: Theme.font-size-label;
+                wrap: word-wrap;
+            }
+            Text {
+                text: AppState.dice-words == 24 ? "All 64 hex characters are the entropy." : "The first 32 hex characters are the entropy.";
+                color: Theme.palette-muted;
+                font-family: Theme.font-primary;
+                font-size: Theme.font-size-label;
+                wrap: word-wrap;
+            }
+        }
     }
     Rectangle { vertical-stretch: 1; }
     Button { text: "Finish"; size: ControlSize.lg; full-width: true; clicked => { AppState.finish(); } }
