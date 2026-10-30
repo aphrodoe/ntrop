@@ -351,11 +351,10 @@ mod tests {
             assert!(a <= 3_000 && f <= 3_000 && g <= 3_000, "seed {seed}: never-rotate-best {a}, column-per-type {f}, column-per-type rot0 {g}");
         }
     }
-    fn leaves_empty(b: &Board, p: u8, r: u8, c: u8, col: usize) -> bool { let mut x = b.clone(); x.place(p, r, c); (0..16).all(|y| x.cells()[y * 8 + col] == 0) }
     #[test] fn shard_well_keeping_earns_nothing() {
         for seed in 10..14 {
-            let w7 = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (!leaves_empty(b, p, r, c, 7), b.rank(p, r, c), r, c)).unwrap());
-            let w0 = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (!leaves_empty(b, p, r, c, 0), b.rank(p, r, c), c, r)).unwrap());
+            let well = |lo: u8, hi: u8| play(seed, move |b, p, ps, _| *ps.iter().filter(|&&(r, c)| c >= lo && c + shape(p, r).iter().map(|q| q.0).max().unwrap() < hi).min_by_key(|&&(r, c)| (b.rank(p, r, c), c, r)).unwrap_or(&ps[0]));
+            let (w7, w0) = (well(0, 7), well(1, 8)); // the piece itself never enters the well column
             let st = play(seed, |b, p, ps, _| *ps.iter().min_by_key(|&&(r, c)| (!(p == 0 && r == 1 && c == 7), b.rank(p, r, c), c, r)).unwrap());
             assert!(w7 <= 3_000 && w0 <= 3_000 && st <= 3_000, "seed {seed}: col7 well {w7}, col0 well {w0}, straights to col 7 {st}");
         }
