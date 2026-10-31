@@ -158,6 +158,10 @@ Unhealthy data is still hashed into the pool (it can't hurt). It just earns no c
    words belong to the device owner and are shown only after the duel. The Outguess card gets a
    1/2-player switch; single player is unchanged. Cross-device play by camera QR exchange is a
    future idea, since the sim camera never delivered frames.
+   Accepted residuals: one person driving both halves with a correlated rule (e.g. P2 = P1 + 1)
+   can earn about 2x their true entropy, the same class as a pattern the experts can't learn. Player 2
+   knows their own doors, but the chip is always mixed in, so the owner's seed never depends on
+   player 2's secrecy alone.
 1b. **Outguess.** The meter at top, a 2×2 grid of large doors, the last result
    ("Machine guessed 3 · MISS · +1.4 bits"), and "The machine reads you N%".
 1c. **Static Hunt.** A first-person view (or the flat fallback) under the meter, with a
