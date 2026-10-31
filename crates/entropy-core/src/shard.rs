@@ -170,6 +170,12 @@ const CREDIT_P: f64 = 0.58;
 const CREDIT_GAIN: f64 = 1.6;
 pub const WARMUP: u32 = 16;
 
+/// Credit ceiling for solver upper-bound `p`: never above the honest -log2(p), and zero until the solver is beaten by a margin.
+fn ceiling_mbits(p: f64) -> u32 {
+    let honest = -p.log2();
+    (honest.min((-(p / CREDIT_P).log2()).max(0.0) * CREDIT_GAIN).max(0.0) * 1000.0).floor() as u32
+}
+
 /// Predictors of the player's next placement, committed before the drop. MCV is IID-only, so these bound the credit.
 /// - P0 heuristic best, P1 leftmost, P2 rightmost, P3 centre-most, P4 lowest landing, P5 same column as last, P6 same placement as last.
 /// - P7..P14 lag-k repeats of the rank (k = 1..8); P15/P16 most frequent successor of the previous 1/2 ranks.
@@ -313,7 +319,7 @@ impl ShardPolicies {
         (self.scored > 0).then(|| {
             let best = self.hits.iter().map(|h| h.count_ones()).max().unwrap_or(0);
             let p = ((best + SLACK_HITS) as f64 / self.scored as f64).min(1.0);
-            (((-(p / CREDIT_P).log2()).max(0.0) * CREDIT_GAIN * 1000.0).floor() as u32, !(p > HEALTH_MAX_P && self.scored >= HEALTH_MIN_N))
+            (ceiling_mbits(p), !(p > HEALTH_MAX_P && self.scored >= HEALTH_MIN_N))
         })
     }
 }
@@ -397,6 +403,9 @@ mod tests {
         })).collect();
         eprintln!("human-like totals {t:?}");
         assert!(t.iter().all(|&x| x > 0), "totals {t:?}");
+    }
+    #[test] fn shard_ceiling_never_exceeds_honest_bound() {
+        for i in 1..=1000 { let p = i as f64 / 1000.0; assert!(ceiling_mbits(p) <= (-p.log2() * 1000.0).floor() as u32, "p {p}"); }
     }
     #[test] fn shard_piece_sequence_is_not_credited() { let (a, b) = (play(4, |b, p, _, _| best(b, p)), play(5, |b, p, _, _| best(b, p))); assert_eq!((a, b), (0, 0)); }
     #[test] fn wipe_clears_board() { let mut s = sess(); for i in 0..5u64 { s.shard_spawn(2); let (r, c) = s.shard.placements(2)[0]; s.shard_place(r, c, i); } assert!(s.shard_cells().iter().any(|&v| v == 1)); s.wipe(); assert!(s.shard_cells().iter().all(|&v| v == 0)); }
