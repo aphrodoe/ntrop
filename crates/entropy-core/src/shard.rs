@@ -80,6 +80,16 @@ impl Board {
         Some((out, lines, bottom))
     }
 
+    /// Does the shape fit at top row `row` (in bounds, no overlap)? Display/gravity only.
+    pub fn fits_at(&self, piece: u8, rot: u8, col: u8, row: u8) -> bool {
+        fits(&self.rows, &shape(piece, rot), col, row)
+    }
+
+    /// Top row where a hard drop of (rot, col) rests; `None` if it does not fit at the top.
+    pub fn land_row(&self, piece: u8, rot: u8, col: u8) -> Option<u8> {
+        self.land(&shape(piece, rot), col)
+    }
+
     /// Legal (rotation, column) hard-drop placements, rotation-major then column.
     pub fn placements(&self, piece: u8) -> Vec<(u8, u8)> {
         let mut v = Vec::new();
@@ -152,7 +162,13 @@ fn top(counts: &[u8]) -> Option<u8> {
 const NPOL: usize = 53;
 const WIN: usize = 64;
 const SLACK_HITS: u32 = 4;
-const HEALTH_MIN_N: u32 = 16;
+/// Scored pieces before the policy gate may flag play as unhealthy, and the predictability it tolerates.
+const HEALTH_MIN_N: u32 = 32;
+const HEALTH_MAX_P: f64 = 0.75;
+/// Credit ceiling is GAIN * -log2(p / CREDIT_P): nothing is credited until the solver is beaten by a margin (the rank MCV still caps it).
+const CREDIT_P: f64 = 0.58;
+const CREDIT_GAIN: f64 = 1.6;
+pub const WARMUP: u32 = 16;
 
 /// Predictors of the player's next placement, committed before the drop. MCV is IID-only, so these bound the credit.
 /// - P0 heuristic best, P1 leftmost, P2 rightmost, P3 centre-most, P4 lowest landing, P5 same column as last, P6 same placement as last.
@@ -286,12 +302,18 @@ impl ShardPolicies {
         self.last = [1, rot, col];
     }
 
+    /// (scored pieces, % of them the best predictor hit); display-only.
+    pub fn progress(&self) -> (u32, u8) {
+        let best = self.hits.iter().map(|h| h.count_ones()).max().unwrap_or(0);
+        (self.scored, if self.scored == 0 { 0 } else { (best * 100 / self.scored).min(100) as u8 })
+    }
+
     /// (credit ceiling in mbits, healthy) after the latest move; `None` until one is scored.
     pub fn bound(&self) -> Option<(u32, bool)> {
         (self.scored > 0).then(|| {
             let best = self.hits.iter().map(|h| h.count_ones()).max().unwrap_or(0);
             let p = ((best + SLACK_HITS) as f64 / self.scored as f64).min(1.0);
-            ((-p.log2() * 1000.0).floor() as u32, !(p > 0.5 && self.scored >= HEALTH_MIN_N))
+            (((-(p / CREDIT_P).log2()).max(0.0) * CREDIT_GAIN * 1000.0).floor() as u32, !(p > HEALTH_MAX_P && self.scored >= HEALTH_MIN_N))
         })
     }
 }
@@ -365,6 +387,16 @@ mod tests {
             let t = play(seed, |b, p, ps, _| { let mut k = n.get(); let t = [[0i32, 4], [7, 2], [1, 5], [6, 3], [2, 7], [4, 0]][p as usize][k[p as usize] % 2]; k[p as usize] += 1; n.set(k); *ps.iter().min_by_key(|&&(r, c)| ((c as i32 - t).abs(), b.rank(p, r, c), r)).unwrap() });
             assert!(t <= 3_000, "seed {seed}: two-spot {t}");
         }
+    }
+    #[test] fn shard_honest_human_like_play_earns() {
+        // A "mostly good" human: rank 0..=5 with weights 40/25/15/10/6/4 %.
+        let t: Vec<u32> = (20..40).map(|seed| play(seed, |b, p, ps, i| {
+            let u = byte(i, seed + 500) as u32 * 100 / 256;
+            let k = [40u32, 65, 80, 90, 96].iter().position(|&w| u < w).unwrap_or(5) as u8;
+            near_rank(b, p, ps, k)
+        })).collect();
+        eprintln!("human-like totals {t:?}");
+        assert!(t.iter().all(|&x| x > 0), "totals {t:?}");
     }
     #[test] fn shard_piece_sequence_is_not_credited() { let (a, b) = (play(4, |b, p, _, _| best(b, p)), play(5, |b, p, _, _| best(b, p))); assert_eq!((a, b), (0, 0)); }
     #[test] fn wipe_clears_board() { let mut s = sess(); for i in 0..5u64 { s.shard_spawn(2); let (r, c) = s.shard.placements(2)[0]; s.shard_place(r, c, i); } assert!(s.shard_cells().iter().any(|&v| v == 1)); s.wipe(); assert!(s.shard_cells().iter().all(|&v| v == 0)); }

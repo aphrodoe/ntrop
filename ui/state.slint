@@ -76,6 +76,8 @@ export global AppState {
     callback duel-owner-ready();
     in property <int> duel-round: 1;
     in property <int> duel-moves;
+    in property <int> duel-p1-warm;
+    in property <int> duel-p2-warm;
     in property <int> duel-hider;
     in property <int> duel-p1-score;
     in property <int> duel-p2-score;
@@ -108,6 +110,11 @@ export global AppState {
     callback shard-move(int);
     callback shard-rotate();
     callback shard-drop();
+    callback shard-soft(int);
+    in property <int> shard-score;
+    in property <int> shard-level: 1;
+    in property <string> shard-solver;
+    in property <[int]> next-cells;
     callback toggle-camera();
     callback painter-done();
     callback generate();

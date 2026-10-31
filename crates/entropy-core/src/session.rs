@@ -138,6 +138,23 @@ impl Session {
         self.shard.cells()
     }
 
+    /// Display-only: can the current piece at (rot, col) be at top row `row` after a straight fall from the top?
+    /// (Then a lock there equals the hard-drop landing the core models.)
+    pub fn shard_fits(&self, rot: u8, col: u8, row: u8) -> bool {
+        (0..=row).all(|r| self.shard.fits_at(self.shard_piece, rot, col, r))
+    }
+
+    /// Display-only: top row where a hard drop of the current piece at (rot, col) rests.
+    pub fn shard_land_row(&self, rot: u8, col: u8) -> Option<u8> {
+        self.shard.land_row(self.shard_piece, rot, col)
+    }
+
+    /// Display-only (scored pieces, warm-up length, % the best solver predictor hit).
+    pub fn shard_progress(&self) -> (u32, u32, u8) {
+        let (n, pct) = self.shard_pol.progress();
+        (n, crate::shard::WARMUP, pct)
+    }
+
     /// Current hard-drop geometry only: does not place, rank, absorb, or credit anything.
     pub fn shard_preview(&self, rot: u8, col: u8) -> Zeroizing<[u8; 128]> {
         let mut preview = Zeroizing::new([0u8; 128]);

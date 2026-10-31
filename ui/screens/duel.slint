@@ -87,6 +87,7 @@ component PlayerHalf inherits Rectangle {
         ? AppState.duel-winner == root.player ? "YOU WIN" : "PLAYER 2 WINS"
         : root.locked && !AppState.duel-revealed ? "Locked. Waiting..."
         : AppState.duel-revealed ? AppState.duel-hit ? "HIT · Same door" : "MISS · Different doors"
+        : (root.player == 0 ? AppState.duel-p1-warm : AppState.duel-p2-warm) < 16 ? "Learning your style " + (root.player == 0 ? AppState.duel-p1-warm : AppState.duel-p2-warm) + "/16"
         : !root.healthy ? "Vary your choices"
         : root.hider ? "Pick a door in secret" : "Guess the hidden door";
     background: #0B0A12;

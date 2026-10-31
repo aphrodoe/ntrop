@@ -49,6 +49,10 @@ fn clear_game_models(st: &AppState) {
     st.set_landing_cells(ModelRc::from(Rc::new(VecModel::from(vec![0i32; 128]))));
     st.set_shard_placements(0);
     st.set_shard_lines(0);
+    st.set_shard_score(0);
+    st.set_shard_level(1);
+    st.set_shard_solver(SharedString::new());
+    st.set_next_cells(ModelRc::from(Rc::new(VecModel::from(vec![0i32; 16]))));
     st.set_last_pick(-1);
     st.set_outguess_round(0);
     st.set_hunt_note(SharedString::new());
@@ -140,12 +144,75 @@ fn render_qr(digits: &str) -> Image {
     Image::from_rgba8(buf)
 }
 
-/// Redraws the Shard Stack board and the waiting piece.
+/// Redraws the Shard Stack board, the falling piece, its landing outline, the next piece and the stats.
 fn sync_shard(st: &AppState, s: &Session, g: &shard::Shard) {
-    st.set_shard_cells(ModelRc::from(Rc::new(VecModel::from(s.shard_cells().iter().map(|&v| v as i32).collect::<Vec<_>>()))));
-    st.set_ghost_cells(ModelRc::from(Rc::new(VecModel::from(entropy_core::shard::Board::ghost(g.piece, g.rot, g.col).iter().map(|&v| v as i32).collect::<Vec<_>>()))));
+    let model = |v: Vec<i32>| ModelRc::from(Rc::new(VecModel::from(v)));
+    st.set_shard_cells(model(s.shard_cells().iter().map(|&v| v as i32).collect()));
+    st.set_ghost_cells(model(g.cells().iter().map(|&v| v as i32).collect()));
     let preview = s.shard_preview(g.rot, g.col);
-    st.set_landing_cells(ModelRc::from(Rc::new(VecModel::from(preview.iter().map(|&v| v as i32).collect::<Vec<_>>()))));
+    st.set_landing_cells(model(preview.iter().map(|&v| v as i32).collect()));
+    let mut next = vec![0i32; 16];
+    for (x, y) in entropy_core::shard::shape(g.next, 0) { next[y as usize * 4 + x as usize] = 1; }
+    st.set_next_cells(model(next));
+    st.set_shard_lines(g.lines as i32);
+    st.set_shard_score((g.lines * g.lines * 100) as i32);
+    st.set_shard_level((g.lines / 5 + 1) as i32);
+    let (n, _, pct) = s.shard_progress();
+    st.set_shard_solver(SharedString::from(if n > 0 { format!("{pct}%") } else { "-".into() }.as_str()));
+}
+
+/// Locks the piece at its current (rot, col, row): the core ranks and credits the placement, then the next piece spawns.
+fn lock_piece(ui: &AppWindow, s: &RefCell<Session>, sh: &RefCell<shard::Shard>, f: &RefCell<Feedback>, start: Instant) {
+    let st = ui.global::<AppState>();
+    let t_us = start.elapsed().as_micros() as u64;
+    let (rot, col, row) = { let g = sh.borrow(); (g.rot, g.col, g.row) };
+    debug_assert_eq!(s.borrow().shard_land_row(rot, col), Some(row));
+    let filled_before = s.borrow().shard_cells().iter().filter(|&&v| v == 1).count();
+    let piece_size = entropy_core::shard::shape(sh.borrow().piece, rot).len();
+    let placed = s.borrow_mut().shard_place(rot, col, t_us);
+    let filled_after = s.borrow().shard_cells().iter().filter(|&&v| v == 1).count();
+    let lines = (filled_before + piece_size).saturating_sub(filled_after) / 8;
+    sh.borrow_mut().lines += lines as u32;
+    st.set_shard_placements(st.get_shard_placements().saturating_add(1));
+    let (scored, warm, _) = s.borrow().shard_progress();
+    let mut note = match placed {
+        Some(_) if scored < warm => format!("Learning your style {scored}/{warm}"),
+        Some(e) if !e.healthy => "Too predictable: surprise the solver".to_string(),
+        Some(e) => format!("+{:.1} bits", e.credit_mbits as f32 / 1000.0),
+        None => String::new(),
+    };
+    sh.borrow_mut().next_piece();
+    s.borrow_mut().shard_spawn(sh.borrow().piece);
+    sh.borrow_mut().settle_spawn(&|r, c, w| s.borrow().shard_fits(r, c, w));
+    if filled_after > 0 && s.borrow().shard_cells().iter().all(|&v| v == 0) {
+        note = "Board full, cleared, bits kept".into();
+    }
+    st.set_shard_note(SharedString::from(note.as_str()));
+    sync_shard(&st, &s.borrow(), &sh.borrow());
+    credit(ui, &s.borrow(), f);
+}
+
+/// 50 ms gravity timer for Shard Stack (shares the Static Hunt timer slot and its stop points).
+fn start_gravity(timer: &slint::Timer, ui: &slint::Weak<AppWindow>, s: &Rc<RefCell<Session>>, sh: &Rc<RefCell<shard::Shard>>, f: &Rc<RefCell<Feedback>>, start: Instant) {
+    let (ui, s, sh, f) = (ui.clone(), s.clone(), sh.clone(), f.clone());
+    timer.start(slint::TimerMode::Repeated, Duration::from_millis(50), move || {
+        let Some(ui) = ui.upgrade() else { return };
+        if ui.global::<AppState>().get_screen() != Screen::Shard { return; }
+        {
+            let mut g = sh.borrow_mut();
+            g.acc += 50;
+            if g.acc < g.interval_ms() { return; }
+            g.acc = 0;
+            let (r, c, w) = (g.rot, g.col, g.row);
+            if s.borrow().shard_fits(r, c, w + 1) {
+                g.row += 1;
+                drop(g);
+                sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
+                return;
+            }
+        }
+        lock_piece(&ui, &s, &sh, &f, start);
+    });
 }
 
 /// Pushes pool counters (never secrets) into the UI.
@@ -266,7 +333,9 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
                 let seed = hw_random().map_or(0x9e37_79b9 ^ start.elapsed().as_nanos() as u32, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
                 *sh.borrow_mut() = shard::Shard::new(seed);
                 s.borrow_mut().shard_spawn(sh.borrow().piece);
+                st.set_shard_note(SharedString::from("Learning your style 0/16"));
                 sync_shard(&st, &s.borrow(), &sh.borrow());
+                start_gravity(&ht, &u, &s, &sh, &f, start);
                 Screen::Shard
             }
             _ => Screen::Painter,
@@ -294,46 +363,37 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
     st.on_shard_move(move |d| {
         s.borrow_mut().shard_move(0, d, start.elapsed().as_micros() as u64);
-        sh.borrow_mut().shift(d);
+        sh.borrow_mut().shift(d, &|r, c, w| s.borrow().shard_fits(r, c, w));
         let ui = u.upgrade().unwrap();
-        ui.global::<AppState>().set_shard_note(SharedString::new());
         sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
     });
     let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
     st.on_shard_rotate(move || {
         s.borrow_mut().shard_move(1, 0, start.elapsed().as_micros() as u64);
-        sh.borrow_mut().rotate();
+        sh.borrow_mut().rotate(&|r, c, w| s.borrow().shard_fits(r, c, w));
         let ui = u.upgrade().unwrap();
-        ui.global::<AppState>().set_shard_note(SharedString::new());
         sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
     });
+    // Soft drop: one row per swipe step, never locks (gravity does).
+    let (u, s, sh) = (ui.as_weak(), session.clone(), shard.clone());
+    st.on_shard_soft(move |n| {
+        for _ in 0..n {
+            let (r, c, w) = { let g = sh.borrow(); (g.rot, g.col, g.row) };
+            if !s.borrow().shard_fits(r, c, w + 1) { break; }
+            sh.borrow_mut().row += 1;
+        }
+        sh.borrow_mut().acc = 0;
+        let ui = u.upgrade().unwrap();
+        sync_shard(&ui.global::<AppState>(), &s.borrow(), &sh.borrow());
+    });
+    // Hard drop: fall to the core's landing row, then lock.
     let (u, s, f, sh) = (ui.as_weak(), session.clone(), fb.clone(), shard.clone());
     st.on_shard_drop(move || {
         let ui = u.upgrade().unwrap();
-        let st = ui.global::<AppState>();
-        let t_us = start.elapsed().as_micros() as u64;
-        let (rot, col) = (sh.borrow().rot, sh.borrow().col);
-        let filled_before = s.borrow().shard_cells().iter().filter(|&&v| v == 1).count();
-        let piece_size = entropy_core::shard::shape(sh.borrow().piece, rot).len();
-        let placed = s.borrow_mut().shard_place(rot, col, t_us);
-        match placed {
-            Some(e) => {
-                let filled_after = s.borrow().shard_cells().iter().filter(|&&v| v == 1).count();
-                let lines = (filled_before + piece_size).saturating_sub(filled_after) / 8;
-                st.set_shard_lines(st.get_shard_lines().saturating_add(lines as i32));
-                st.set_shard_placements(st.get_shard_placements().saturating_add(1));
-                let note = if !e.healthy { "Too predictable: try other spots".into() } else { format!("+{:.1} bits", e.credit_mbits as f32 / 1000.0) };
-                st.set_shard_note(SharedString::from(note.as_str()));
-                sh.borrow_mut().next_piece();
-                s.borrow_mut().shard_spawn(sh.borrow().piece);
-                if filled_after > 0 && s.borrow().shard_cells().iter().all(|&v| v == 0) {
-                    st.set_shard_note(SharedString::from("Fresh board. Your bits are kept."));
-                }
-                sync_shard(&st, &s.borrow(), &sh.borrow());
-                credit(&ui, &s.borrow(), &f);
-            }
-            None => st.set_shard_note(SharedString::from("No room there")),
-        }
+        let (rot, col) = { let g = sh.borrow(); (g.rot, g.col) };
+        let Some(row) = s.borrow().shard_land_row(rot, col) else { return };
+        sh.borrow_mut().row = row;
+        lock_piece(&ui, &s, &sh, &f, start);
     });
 
     let (u, s) = (ui.as_weak(), session.clone());
@@ -581,13 +641,14 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     // finish() and back-home() both wipe the session and every secret-bearing UI property.
-    let (u, s, t, ht, g, sh) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone(), gesture.clone(), shard.clone());
+    let (u, s, t, ht, g, sh, hu) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone(), gesture.clone(), shard.clone(), hunt.clone());
     let d = duel.clone();
     let leave = Rc::new(move || {
         d.stop();
         ht.stop();
         *sh.borrow_mut() = shard::Shard::new(1); // drops piece/rot/col/rng
         *g.borrow_mut() = Gesture::default();
+        *hu.borrow_mut() = hunt::Hunt::new(1);
         s.borrow_mut().wipe();
         t.set_vec(Vec::new());
         let ui = u.upgrade().unwrap();

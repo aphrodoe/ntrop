@@ -137,6 +137,23 @@ fn credit_bound(moves: usize, hits: u32) -> (u32, bool) {
     }
 }
 
+/// Duel health: unhealthy only above this predictability, and only once a player has made this many moves.
+const DUEL_HEALTH_P: f64 = 0.75;
+const DUEL_HEALTH_MIN: usize = 32;
+
+/// Duel credit for one player: 16-move warm-up, then the same conservative bound as Outguess; flagged unhealthy
+/// only when the solver reads them above 75% after 32 moves (honest play sits well below that).
+fn duel_bound(moves: usize, hits: u32) -> (u32, bool) {
+    if moves <= WARMUP {
+        return (0, true);
+    }
+    let p_ub = ((hits + MARGIN_HITS) as f64 / moves.min(WINDOW) as f64).min(1.0);
+    if p_ub > DUEL_HEALTH_P {
+        return (0, moves < DUEL_HEALTH_MIN);
+    }
+    (((-p_ub.log2() * 1000.0).floor() as u32).min(MAX_MBITS), true)
+}
+
 pub const DUEL_SWAP_ROUNDS: u32 = 5;
 pub const DUEL_WIN_SCORE: u8 = 10;
 pub const DUEL_LOCK_US: u64 = 3_000_000;
@@ -170,6 +187,8 @@ pub struct Duel {
 
 impl Duel {
     pub fn moves(&self) -> usize { self.oracles[0].doors.len() }
+    /// Display-only warm-up progress (0..=16) for a player.
+    pub fn warmup(&self, player: usize) -> usize { self.oracles[player & 1].doors.len().min(WARMUP) }
     pub fn hider(&self) -> u8 { self.hider }
     pub fn scores(&self) -> [u8; 2] { self.scores }
     pub fn round_number(&self) -> u32 { self.round_number }
@@ -208,7 +227,7 @@ impl Duel {
             oracle.record(doors[player]);
             let machine_hits = oracle.ehits.iter().map(|h| window_hits(h)).max().unwrap_or(0);
             (credit_mbits[player], healthy[player]) =
-                credit_bound(oracle.doors.len(), machine_hits.max(opponent_hits));
+                duel_bound(oracle.doors.len(), machine_hits.max(opponent_hits));
         }
         doors.zeroize();
         let scorer = if seeker_hit { seeker } else { hider };
@@ -356,7 +375,7 @@ mod tests {
             let door = random_pair(i)[0];
             let r = duel_pick(&mut d, [door, door]);
             assert_eq!(r.credit_mbits, [0, 0]);
-            if i >= WARMUP as u32 {
+            if i >= DUEL_HEALTH_MIN as u32 {
                 assert_eq!(r.healthy, [false, false]);
             }
         }
@@ -376,6 +395,7 @@ mod tests {
                 total[player] += r.credit_mbits[player];
             }
         }
+        eprintln!("duel both-random totals {total:?}");
         assert!(total.into_iter().all(|n| n >= 50_000), "{total:?}");
     }
 
@@ -389,6 +409,7 @@ mod tests {
                 total[player] += r.credit_mbits[player];
             }
         }
+        eprintln!("duel constant-vs-random totals {total:?}");
         assert_eq!(total[0], 0);
         assert!(total[1] >= 50_000);
     }

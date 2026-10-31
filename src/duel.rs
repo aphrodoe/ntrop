@@ -15,6 +15,8 @@ const REVEAL_US: u64 = 1_500_000;
 pub fn clear_ui(st: &AppState) {
     st.set_duel_round(1);
     st.set_duel_moves(0);
+    st.set_duel_p1_warm(0);
+    st.set_duel_p2_warm(0);
     st.set_duel_hider(0);
     st.set_duel_p1_score(0);
     st.set_duel_p2_score(0);
@@ -97,6 +99,8 @@ impl Controller {
         let scores = duel.scores();
         st.set_duel_round(duel.round_number().saturating_add(1) as i32);
         st.set_duel_moves(duel.moves().min(i32::MAX as usize) as i32);
+        st.set_duel_p1_warm(duel.warmup(0) as i32);
+        st.set_duel_p2_warm(duel.warmup(1) as i32);
         st.set_duel_hider(duel.hider() as i32);
         st.set_duel_p1_score(scores[0] as i32);
         st.set_duel_p2_score(scores[1] as i32);
@@ -154,6 +158,8 @@ impl Controller {
         self.reveal_until.set(now.saturating_add(REVEAL_US));
         let s = self.session.borrow();
         st.set_duel_moves(s.duel().moves().min(i32::MAX as usize) as i32);
+        st.set_duel_p1_warm(s.duel().warmup(0) as i32);
+        st.set_duel_p2_warm(s.duel().warmup(1) as i32);
         let note = if let Some(winner) = result.winner {
             format!("Player {} wins · Again keeps your entropy", winner + 1)
         } else if result.roles_swapped {

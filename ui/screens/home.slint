@@ -74,6 +74,7 @@ export component HomeScreen inherits Rectangle {
     }
 
     if root.help: Pinstripe {
+        TouchArea {}
         NavBar { y: 40px; width: parent.width; title: "How it works"; back-label: "Home"; back => { root.help = false; } }
         VerticalLayout {
             y: 104px; height: parent.height - 104px;
