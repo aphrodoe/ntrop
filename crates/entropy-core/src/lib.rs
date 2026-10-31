@@ -15,7 +15,7 @@ pub mod shard;
 
 pub use mcv::{Estimate, Mcv};
 pub use dice::{dice_entropy, min_rolls, DiceError};
-pub use outguess::{Move, Oracle};
+pub use outguess::{Duel, DuelChoices, DuelLock, DuelRound, DuelTap, Move, Oracle};
 pub use pool::{EntropyPool, SampleResult};
 pub use quiz::{make_quiz, QuizQuestion};
 pub use randomart::randomart;

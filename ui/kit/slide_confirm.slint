@@ -31,10 +31,12 @@ export component SlideConfirm inherits Rectangle {
         animate x { duration: ta.pressed ? 0ms : 220ms; easing: ease-out; }
         Image { width: 84px; height: 56px; source: @image-url("../../resources/icons/knob.svg"); }
         ta := TouchArea {
-            moved => { root.drag = max(0, min(root.max-drag, root.drag + self.mouse-x - self.pressed-x)); }
+            moved => {
+                if self.pressed { root.drag = max(0, min(root.max-drag, root.drag + self.mouse-x - self.pressed-x)); }
+            }
             pointer-event(e) => {
                 if e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel {
-                    if root.drag >= root.max-drag * 0.85 { root.confirmed(); }
+                    if e.kind == PointerEventKind.up && root.max-drag > 0px && root.drag >= root.max-drag * 0.85 { root.confirmed(); }
                     root.drag = 0;
                 }
             }

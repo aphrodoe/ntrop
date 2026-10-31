@@ -1,0 +1,191 @@
+// SPDX-License-Identifier: MIT
+
+import { AppState, Ios, Neon } from "../state.slint";
+import { NavBar } from "../kit/nav_bar.slint";
+import { ProgressMeter } from "../kit/progress_meter.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
+import { Pinstripe } from "../kit/pinstripe.slint";
+import { GroupLabel, GroupedCell } from "../kit/grouped_cell.slint";
+
+// The software renderer ignores item rotation, and SVG <text> embeds as an empty texture (a
+// renderer panic), so upside-down labels are pre-rotated Arimo PNG sheets; layout is mirrored here.
+component InvertedLabel inherits Rectangle {
+    in property <int> band;
+    clip: true;
+    Image {
+        y: -root.band * root.height; width: root.width; height: root.height * 25;
+        source: @image-url("../../resources/icons/duel-labels-inverted.png");
+        image-fit: fill;
+    }
+}
+
+component DuelDoor inherits Rectangle {
+    in property <int> player;
+    in property <int> index;
+    in property <bool> flipped;
+    in property <bool> locked;
+    in property <bool> mine;
+    in property <bool> theirs;
+    border-radius: 11px;
+    border-width: root.mine ? 3px : root.theirs ? 2px : 1px;
+    border-color: root.mine && root.theirs ? #C6FF3D : root.mine ? #F2F0FF : root.theirs ? Neon.game : #5F497F;
+    background: root.flipped
+        ? @linear-gradient(180deg, #281D42 0%, #4B3473 50%, #705193 100%)
+        : @linear-gradient(180deg, #705193 0%, #4B3473 50%, #281D42 100%);
+    opacity: root.locked && !AppState.duel-revealed ? 0.5 : 1;
+    Rectangle {
+        x: 9px; y: 9px; width: parent.width - 18px; height: parent.height - 18px;
+        border-radius: 5px; border-width: 1px; border-color: #9D7EC3; background: #211831;
+    }
+    Rectangle {
+        x: 12px; y: root.flipped ? parent.height - 14px : 12px;
+        width: parent.width - 24px; height: 2px; background: #FFFFFF35;
+    }
+    Rectangle {
+        x: root.flipped ? 18px : parent.width - 26px;
+        y: parent.height / 2 - 4px; width: 8px; height: 8px;
+        border-radius: 4px; background: #D7C7FF;
+    }
+    if !root.flipped: Text {
+        text: root.index + 1; color: #F2F0FF;
+        font-family: Ios.font; font-size: 32px; font-weight: 700;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
+    if root.flipped: Rectangle {
+        x: (parent.width - 44px) / 2; y: (parent.height - 44px) / 2;
+        width: 44px; height: 44px; clip: true;
+        Image {
+            y: -root.index * 44px; width: 44px; height: 176px;
+            source: @image-url("../../resources/icons/duel-numbers-inverted.png");
+            image-fit: fill;
+        }
+    }
+    // No per-door pressed highlight: after a tap the whole half just says Locked.
+    TouchArea {
+        enabled: !root.locked && !AppState.duel-revealed && AppState.duel-winner < 0;
+        pointer-event(e) => {
+            if e.kind == PointerEventKind.down {
+                AppState.duel-pick(root.player, root.index,
+                    self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
+    }
+}
+
+component PlayerHalf inherits Rectangle {
+    in property <int> player;
+    in property <bool> flipped: root.player == 1;
+    property <bool> hider: AppState.duel-hider == root.player;
+    property <int> score: root.player == 0 ? AppState.duel-p1-score : AppState.duel-p2-score;
+    property <bool> locked: root.player == 0 ? AppState.duel-p1-locked : AppState.duel-p2-locked;
+    property <bool> healthy: root.player == 0 ? AppState.duel-p1-healthy : AppState.duel-p2-healthy;
+    property <int> mine: root.player == 0 ? AppState.duel-p1-door : AppState.duel-p2-door;
+    property <int> theirs: root.player == 0 ? AppState.duel-p2-door : AppState.duel-p1-door;
+    property <length> door-width: (root.width - 44px) / 2;
+    property <length> door-height: 82px;
+    property <string> status: AppState.duel-winner >= 0
+        ? AppState.duel-winner == root.player ? "YOU WIN" : "PLAYER 2 WINS"
+        : root.locked && !AppState.duel-revealed ? "Locked. Waiting..."
+        : AppState.duel-revealed ? AppState.duel-hit ? "HIT · Same door" : "MISS · Different doors"
+        : !root.healthy ? "Vary your choices"
+        : root.hider ? "Pick a door in secret" : "Guess the hidden door";
+    background: #0B0A12;
+
+    if !root.flipped: Text {
+        x: 12px; y: 6px; width: root.width - 24px; height: 30px;
+        text: "PLAYER 1 · " + (root.hider ? "HIDER" : "SEEKER");
+        color: #F2F0FF; font-family: Ios.font; font-size: 20px; font-weight: 700;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
+    if root.flipped: InvertedLabel {
+        x: 12px; y: root.height - 36px; width: root.width - 24px; height: 30px;
+        band: root.hider ? 0 : 1;
+    }
+    if !root.flipped: Text {
+        x: 12px; y: 38px; width: root.width - 24px; height: 32px;
+        text: root.score + " / 10"; color: #FFFFFF;
+        font-family: Ios.font; font-size: 24px; font-weight: 700;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
+    if root.flipped: InvertedLabel {
+        x: 12px; y: root.height - 70px; width: root.width - 24px; height: 32px;
+        band: 14 + min(root.score, 10);
+    }
+
+    for door-index in 4: DuelDoor {
+        property <length> local-x: 16px + mod(door-index, 2) * (root.door-width + 12px);
+        property <length> local-y: 82px + floor(door-index / 2) * (root.door-height + 10px);
+        width: root.door-width; height: root.door-height;
+        x: root.flipped ? root.width - self.local-x - self.width : self.local-x;
+        y: root.flipped ? root.height - self.local-y - self.height : self.local-y;
+        player: root.player; index: door-index; flipped: root.flipped; locked: root.locked;
+        mine: AppState.duel-revealed && root.mine == door-index;
+        theirs: AppState.duel-revealed && root.theirs == door-index;
+    }
+
+    if !root.flipped: Text {
+        x: 12px; y: root.height - 36px; width: root.width - 24px; height: 30px;
+        text: root.status; color: root.locked ? #C6FF3D : !root.healthy ? #FFB020 : #C8C1DB;
+        font-family: Ios.font; font-size: 16px; font-weight: 700;
+        horizontal-alignment: center; vertical-alignment: center;
+    }
+    if root.flipped: InvertedLabel {
+        x: 12px; y: 6px; width: root.width - 24px; height: 30px;
+        band: AppState.duel-winner >= 0 ? AppState.duel-winner == root.player ? 7 : 8
+            : root.locked && !AppState.duel-revealed ? 4
+            : AppState.duel-revealed ? AppState.duel-hit ? 5 : 6
+            : !root.healthy ? 11 : root.hider ? 2 : 3;
+    }
+}
+
+export component DuelScreen inherits Rectangle {
+    property <bool> full: AppState.touch-bits + AppState.camera-bits + AppState.game-bits >= AppState.target-bits;
+    property <length> half-height: (root.height - 200px) / 2;
+    background: #0B0A12;
+
+    PlayerHalf { player: 1; y: 40px; width: root.width; height: root.half-height; }
+    PlayerHalf { player: 0; y: root.height - root.half-height; width: root.width; height: root.half-height; }
+
+    Rectangle {
+        y: 40px + root.half-height; width: root.width; height: 160px;
+        background: #171323;
+        NavBar {
+            y: 0; width: parent.width; title: "Duel · R" + AppState.duel-round; back-label: "Home";
+            right-label: root.full ? "Done" : AppState.duel-winner >= 0 ? "Again" : "";
+            back => { AppState.back-home(); }
+            right => {
+                if root.full { AppState.painter-done(); }
+                else { AppState.duel-next-match(); }
+            }
+        }
+        ProgressMeter {
+            x: 16px; y: 72px; width: parent.width - 32px; height: 54px;
+            target: AppState.target-bits; game-bits: AppState.game-bits;
+            game-ok: AppState.game-healthy; label-color: #C8C1DB; full-color: #C6FF3D;
+        }
+        Text {
+            x: 12px; y: 132px; width: parent.width - 24px; height: 22px;
+            text: root.full ? "Ready. Done continues with the device owner."
+                : AppState.duel-countdown > 0 ? "Lock in · " + AppState.duel-countdown + " s"
+                : AppState.duel-note;
+            color: AppState.duel-countdown > 0 ? #FFB020 : #C8C1DB;
+            font-family: Ios.font; font-size: 14px;
+            horizontal-alignment: center; vertical-alignment: center; overflow: elide;
+        }
+    }
+}
+
+// The split view ends before any seed or mnemonic is generated or displayed.
+export component DuelOwnerScreen inherits Pinstripe {
+    NavBar {
+        y: 40px; width: root.width; title: "Device owner"; back-label: "Home";
+        back => { AppState.back-home(); }
+    }
+    VerticalLayout {
+        y: 104px; height: root.height - 104px; padding: 20px; spacing: 16px;
+        GroupedCell { first: true; last: true; wrap: true; label: "The duel is finished. Turn the device toward its owner and continue privately."; }
+        GroupLabel { text: "Player 2 contributed entropy. The next screens belong to the owner and contain the seed backup."; size: 18px; weight: 400; }
+        Rectangle { vertical-stretch: 1; }
+        GlossyButton { text: "Continue as owner"; primary: true; clicked => { AppState.duel-owner-ready(); } }
+    }
+}

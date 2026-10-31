@@ -105,6 +105,34 @@ impl EntropyPool {
         self.add_game(TAG_OUTGUESS, Some(door), x, y, t_us, credit_mbits, healthy);
     }
 
+    /// Absorbs both players atomically, under distinct player/role markers.
+    /// Only door-choice credit is counted; tap coordinates and timing are mixed only.
+    pub fn add_duel_round(
+        &mut self,
+        hider: u8,
+        doors: [u8; 2],
+        taps: [crate::outguess::DuelTap; 2],
+        credit_mbits: [u32; 2],
+        healthy: [bool; 2],
+    ) {
+        for player in 0..2 {
+            let mut raw = [0u8; 19];
+            raw[0] = 0xD0 | player as u8;
+            raw[1] = (player as u8 == hider) as u8;
+            raw[2] = doors[player];
+            raw[3..7].copy_from_slice(&taps[player].0.to_le_bytes());
+            raw[7..11].copy_from_slice(&taps[player].1.to_le_bytes());
+            raw[11..].copy_from_slice(&taps[player].2.to_le_bytes());
+            self.absorb(TAG_OUTGUESS, &raw);
+            raw.zeroize();
+            if healthy[player] {
+                self.game_mbits = self.game_mbits
+                    .saturating_add(credit_mbits[player].min(crate::outguess::MAX_MBITS));
+            }
+        }
+        self.game_ok = healthy.into_iter().all(|ok| ok);
+    }
+
     /// Absorbs a Shard Stack placement (`piece ‖ rot ‖ col ‖ t_us`) and adds the rank credit for it.
     pub fn add_shard(&mut self, piece: u8, rot: u8, col: u8, t_us: u64, credit_mbits: u32, healthy: bool) {
         self.add_game(TAG_SHARD, Some(piece), rot as i32, col as i32, t_us, credit_mbits, healthy);
@@ -419,5 +447,56 @@ mod tests {
         assert!(!p.game_healthy());
         p.wipe();
         assert_eq!((p.game_bits(), p.game_healthy(), p.credited_bits()), (0, true, 0));
+    }
+
+    #[test]
+    fn duel_absorbs_players_roles_doors_and_both_taps_without_credit() {
+        fn digest(hider: u8, doors: [u8; 2], taps: [(i32, i32, u64); 2]) -> Zeroizing<Vec<u8>> {
+            let mut p = EntropyPool::new(WordCount::TwentyFour);
+            p.add_duel_round(hider, doors, taps, [0; 2], [true; 2]);
+            assert_eq!(p.credited_bits(), 0);
+            p.finish(&[7; 32])
+        }
+        let doors = [1, 2];
+        let taps = [(10, 20, 30), (40, 50, 60)];
+        let base = digest(0, doors, taps);
+        assert_ne!(base, digest(1, doors, taps));
+        assert_ne!(base, digest(0, [2, 1], taps));
+        for player in 0..2 {
+            let mut changed = taps;
+            changed[player].0 += 1;
+            assert_ne!(base, digest(0, doors, changed));
+            changed = taps;
+            changed[player].1 += 1;
+            assert_ne!(base, digest(0, doors, changed));
+            changed = taps;
+            changed[player].2 += 1;
+            assert_ne!(base, digest(0, doors, changed));
+        }
+        // Equal door/tap values still carry distinct player markers.
+        let mut p = EntropyPool::new(WordCount::TwentyFour);
+        p.add_duel_round(0, [1, 1], [taps[0]; 2], [0; 2], [true; 2]);
+        let mut expected = Sha256::new();
+        for player in 0..2 {
+            let mut raw = vec![0xD0 | player, (player == 0) as u8, 1];
+            raw.extend_from_slice(&10i32.to_le_bytes());
+            raw.extend_from_slice(&20i32.to_le_bytes());
+            raw.extend_from_slice(&30u64.to_le_bytes());
+            expected.update([TAG_OUTGUESS]);
+            expected.update((raw.len() as u32).to_le_bytes());
+            expected.update(raw);
+        }
+        assert_eq!(p.hasher.clone().finalize(), expected.finalize());
+    }
+
+    #[test]
+    fn duel_credits_only_healthy_players_and_combines_health() {
+        let mut p = EntropyPool::new(WordCount::Twelve);
+        p.add_duel_round(0, [1, 2], [(0, 0, 0); 2], [2000, 2000], [false, true]);
+        assert_eq!(p.game_bits(), 2);
+        assert!(!p.game_healthy());
+        p.add_duel_round(1, [1, 2], [(0, 0, 0); 2], [1500, 1500], [true, true]);
+        assert_eq!(p.game_bits(), 5);
+        assert!(p.game_healthy());
     }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import { AppState, Ios } from "../state.slint";
+import { GlossyButton } from "../kit/glossy_button.slint";
 import { GlossyIcon } from "../kit/glossy_icon.slint";
 import { Segmented } from "../kit/segmented.slint";
 import { NavBar } from "../kit/nav_bar.slint";
@@ -26,7 +27,7 @@ export component HomeScreen inherits Rectangle {
         selected <=> AppState.word-option;
     }
 
-    GlossyIcon { x: 12px; y: 138px; icon: @image-url("../../resources/icons/shard.svg"); label: "Shard"; tint: #138C86; clicked => { AppState.start-arcade(root.words, 4); } }
+    GlossyIcon { x: 12px; y: 138px; icon: @image-url("../../resources/icons/shard.svg"); label: "Shard"; tint: #138C86; clicked => { AppState.start-arcade(root.words, 4, 1); } }
     GlossyIcon { x: 126px; y: 138px; icon: @image-url("../../resources/icons/info.svg"); label: "How it works"; tint: #6F7D91; clicked => { root.help = true; } }
 
     Text {
@@ -35,15 +36,40 @@ export component HomeScreen inherits Rectangle {
         font-family: Ios.font; font-size: 16px;
     }
 
+    Rectangle {
+        x: 24px; y: 340px; width: root.width - 48px; height: 176px;
+        border-radius: 14px; background: #17151F; border-width: 1px; border-color: #393144;
+        Text {
+            x: 16px; y: 14px; width: parent.width - 32px; height: 28px;
+            text: "Outguess"; color: #FFFFFF; font-family: Ios.font; font-size: 22px; font-weight: 700;
+        }
+        Segmented {
+            x: 16px; y: 58px; width: parent.width - 144px;
+            options: ["1 player", "2 players"];
+            selected <=> AppState.outguess-player-option;
+        }
+        GlossyButton {
+            x: parent.width - 116px; y: 51px; width: 100px;
+            text: "Play"; primary: true;
+            clicked => { AppState.start-arcade(root.words, 1, AppState.outguess-player-option + 1); }
+        }
+        Text {
+            x: 16px; y: 122px; width: parent.width - 32px; height: 38px;
+            text: AppState.outguess-player-option == 0 ? "Beat the machine at its own guessing game."
+                : "Face-to-face Duel. One device. First to 10.";
+            color: #BDB5CC; font-family: Ios.font; font-size: 16px; wrap: word-wrap;
+        }
+    }
+
     dock := Rectangle {
         y: root.height - self.height; height: 136px;
         // metal mesh shelf with a solid label band, as on the 2007 dock
         Image { y: 0; width: parent.width; height: 112px; source: @image-url("../../resources/icons/dock-mesh.svg"); }
         Rectangle { y: 112px; height: 24px; background: @linear-gradient(180deg, #5E6064 0%, #75777B 30%, #86888C 100%); }
         Rectangle { y: 112px; height: 1px; background: #3A3C40; }
-        GlossyIcon { x: 12px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/paintbrush.svg"); label: "Painter"; tint: #E8771A; clicked => { AppState.start-arcade(root.words, 0); } }
-        GlossyIcon { x: 126px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/doors.svg"); label: "Outguess"; tint: #6A46D6; clicked => { AppState.start-arcade(root.words, 1); } }
-        GlossyIcon { x: 240px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/ghost.svg"); label: "Hunt"; tint: #2F9A45; clicked => { AppState.start-arcade(root.words, 2); } }
+        GlossyIcon { x: 12px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/paintbrush.svg"); label: "Painter"; tint: #E8771A; clicked => { AppState.start-arcade(root.words, 0, 1); } }
+        GlossyIcon { x: 126px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/doors.svg"); label: "Outguess"; tint: #6A46D6; clicked => { AppState.start-arcade(root.words, 1, AppState.outguess-player-option + 1); } }
+        GlossyIcon { x: 240px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/ghost.svg"); label: "Hunt"; tint: #2F9A45; clicked => { AppState.start-arcade(root.words, 2, 1); } }
         GlossyIcon { x: 354px; y: 14px; label-y: 101px; icon: @image-url("../../resources/icons/die.svg"); label: "Dice"; tint: #C42A2A; clicked => { AppState.start-dice(root.words); } }
     }
 

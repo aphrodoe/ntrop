@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 mod camera;
+mod duel;
 mod haptics;
 mod hunt;
 mod shard;
@@ -44,6 +45,7 @@ fn hw_random() -> Result<[u8; 32], ()> {
 
 /// Releases gameplay display data before entering the backup flow.
 fn clear_game_models(st: &AppState) {
+    duel::clear_ui(st);
     st.set_landing_cells(ModelRc::from(Rc::new(VecModel::from(vec![0i32; 128]))));
     st.set_shard_placements(0);
     st.set_shard_lines(0);
@@ -232,11 +234,14 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     let hunt_timer = Rc::new(slint::Timer::default());
     let shard = Rc::new(RefCell::new(shard::Shard::new(1)));
     let pop = Rc::new(Cell::new(0u32)); // ms left on the "+1 bit" pop
+    let duel = duel::Controller::new(&ui, session.clone(), fb.clone(), start);
 
     let (u, s, t, f) = (ui.as_weak(), session.clone(), trail.clone(), fb.clone());
     let (h, g, ht, pop2) = (hunt.clone(), gesture.clone(), hunt_timer.clone(), pop.clone());
     let sh = shard.clone();
-    st.on_start_arcade(move |n, game| {
+    let d = duel.clone();
+    st.on_start_arcade(move |n, game, players| {
+        d.stop();
         *f.borrow_mut() = Feedback::new();
         let ui = u.upgrade().unwrap();
         camera_off(&ui.global::<AppState>());
@@ -248,6 +253,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
         clear_secrets(&st);
         ht.stop();
         st.set_screen(match game {
+            1 if players == 2 => { d.start(); Screen::Duel }
             1 => Screen::Outguess,
             2 => {
                 let seed = hw_random().map_or(0x9e37_79b9 ^ start.elapsed().as_nanos() as u32, |b| u32::from_le_bytes([b[0], b[1], b[2], b[3]]));
@@ -331,7 +337,9 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     let (u, s) = (ui.as_weak(), session.clone());
+    let d = duel.clone();
     st.on_start_dice(move |n| {
+        d.stop();
         let wc = if n == 24 { WordCount::TwentyFour } else { WordCount::Twelve };
         s.borrow_mut().start_dice(wc);
         let ui = u.upgrade().unwrap();
@@ -466,6 +474,7 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     let (u, s, ht, t) = (ui.as_weak(), session.clone(), hunt_timer.clone(), trail.clone());
+    let d = duel.clone();
     st.on_painter_done(move || {
         let ui = u.upgrade().unwrap();
         if s.borrow().pool().is_some_and(|p| p.is_full()) {
@@ -473,7 +482,18 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
             let st = ui.global::<AppState>();
             camera_off(&st);
             t.set_vec(Vec::new());
+            let was_duel = st.get_screen() == Screen::Duel;
+            d.stop();
             clear_game_models(&st);
+            st.set_screen(if was_duel { Screen::Duelowner } else { Screen::Summary });
+        }
+    });
+
+    let (u, s) = (ui.as_weak(), session.clone());
+    st.on_duel_owner_ready(move || {
+        let Some(ui) = u.upgrade() else { return };
+        let st = ui.global::<AppState>();
+        if st.get_screen() == Screen::Duelowner && s.borrow().pool().is_some_and(|p| p.is_full()) {
             st.set_screen(Screen::Summary);
         }
     });
@@ -562,7 +582,9 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
 
     // finish() and back-home() both wipe the session and every secret-bearing UI property.
     let (u, s, t, ht, g, sh) = (ui.as_weak(), session.clone(), trail.clone(), hunt_timer.clone(), gesture.clone(), shard.clone());
+    let d = duel.clone();
     let leave = Rc::new(move || {
+        d.stop();
         ht.stop();
         *sh.borrow_mut() = shard::Shard::new(1); // drops piece/rot/col/rng
         *g.borrow_mut() = Gesture::default();
@@ -596,4 +618,5 @@ fn app_main(_cx: AppContext, ui: AppWindow) {
     });
 
     ui.run().expect("UI running");
+    duel.stop();
 }

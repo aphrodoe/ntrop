@@ -3,7 +3,7 @@
 use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
-    dice_entropy, master_fingerprint, make_quiz, outguess::{Move, Oracle}, randomart, seedqr_digits, words, shard::{Board, ShardPolicies}, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
+    dice_entropy, master_fingerprint, make_quiz, outguess::{Duel, DuelRound, DuelTap, Move, Oracle}, randomart, seedqr_digits, words, shard::{Board, ShardPolicies}, mcv::{Estimate, Mcv}, EntropyPool, QuizQuestion, SampleResult, WordCount,
 };
 
 pub struct Session {
@@ -15,6 +15,7 @@ pub struct Session {
     quiz: Vec<QuizQuestion>,
     step: usize,
     oracle: Oracle,
+    duel: Duel,
     pub(crate) shard: Board,
     pub(crate) shard_piece: u8,
     shard_pol: ShardPolicies,
@@ -35,7 +36,7 @@ pub enum QuizOutcome {
 
 impl Session {
     pub fn new() -> Self {
-        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), shard: Board::default(), shard_piece: 0, shard_pol: ShardPolicies::default(), shard_mcv: Mcv::new(16, 3000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
+        Self { pool: None, wc: WordCount::Twelve, entropy: None, words: Zeroizing::new(Vec::new()), page: 0, quiz: Vec::new(), step: 0, oracle: Oracle::default(), duel: Duel::default(), shard: Board::default(), shard_piece: 0, shard_pol: ShardPolicies::default(), shard_mcv: Mcv::new(16, 3000), rolls: Zeroizing::new(Vec::with_capacity(MAX_ROLLS)) }
     }
 }
 
@@ -68,6 +69,37 @@ impl Session {
         }
         m
     }
+
+    pub fn duel(&self) -> &Duel { &self.duel }
+
+    /// Commits a complete locked pair. A finished match ignores further input.
+    pub fn duel_round(
+        &mut self,
+        hider_door: u8,
+        seeker_guess: u8,
+        hider_tap: DuelTap,
+        seeker_tap: DuelTap,
+    ) -> DuelRound {
+        let active = self.duel.winner().is_none();
+        let hider = self.duel.hider();
+        let result = self.duel.round(hider_door, seeker_guess, hider_tap, seeker_tap);
+        if active {
+            let mut doors = [0; 2];
+            let mut taps = [(0, 0, 0); 2];
+            doors[hider as usize] = hider_door;
+            doors[1 - hider as usize] = seeker_guess;
+            taps[hider as usize] = hider_tap;
+            taps[1 - hider as usize] = seeker_tap;
+            if let Some(pool) = self.pool.as_mut() {
+                pool.add_duel_round(hider, doors, taps, result.credit_mbits, result.healthy);
+            }
+            doors.zeroize();
+            taps.zeroize();
+        }
+        result
+    }
+
+    pub fn duel_next_match(&mut self) -> bool { self.duel.next_match() }
 
     /// Sets the piece to place (from the app's game PRNG; never credited). A piece with no legal placement clears the board.
     pub fn shard_spawn(&mut self, piece: u8) {
@@ -199,6 +231,7 @@ impl Session {
         self.quiz = Vec::new(); // QuizQuestion zeroizes on drop
         self.step = 0;
         self.oracle.wipe();
+        self.duel.wipe();
         self.shard.zeroize();
         self.shard_piece = 0;
         self.shard_pol.zeroize();
@@ -464,5 +497,50 @@ mod tests {
         let e = s.entropy.as_ref().unwrap();
         assert_eq!(s.fingerprint().unwrap().0, master_fingerprint(e));
         assert_eq!(&*crate::words(e), s.words());
+    }
+
+    #[test]
+    fn duel_session_accumulates_both_players_and_retains_credit_across_matches() {
+        use sha2::{Digest, Sha256};
+        let mut s = Session::new();
+        s.start_arcade(WordCount::TwentyFour);
+        let mut total = 0u32;
+        for i in 0..128u32 {
+            if s.duel().winner().is_some() {
+                let before = s.pool().unwrap().game_bits();
+                assert!(s.duel_next_match());
+                assert_eq!(s.pool().unwrap().game_bits(), before);
+            }
+            let hash = Sha256::digest(i.to_le_bytes());
+            let doors = [hash[0] & 3, hash[1] & 3];
+            let h = s.duel().hider() as usize;
+            let r = s.duel_round(doors[h], doors[1 - h], (1, 2, i as u64), (3, 4, i as u64 + 1));
+            total += r.credit_mbits.into_iter().sum::<u32>();
+            assert_eq!(s.pool().unwrap().game_bits(), total / 1000);
+        }
+        assert!(total >= 100_000);
+        s.wipe();
+        assert!(s.pool().is_none());
+        assert_eq!(s.duel().scores(), [0, 0]);
+        assert_eq!(s.duel().round_number(), 0);
+        s.start_arcade(WordCount::Twelve);
+        assert_eq!(s.duel_round(1, 2, (0, 0, 0), (0, 0, 0)).credit_mbits, [0, 0]);
+        assert_eq!(s.pool().unwrap().game_bits(), 0);
+    }
+
+    #[test]
+    fn duel_session_ignores_input_after_match_winner() {
+        let mut a = Session::new();
+        let mut b = Session::new();
+        a.start_arcade(WordCount::Twelve);
+        b.start_arcade(WordCount::Twelve);
+        while a.duel().winner().is_none() {
+            a.duel_round(1, 2, (1, 2, 3), (4, 5, 6));
+            b.duel_round(1, 2, (1, 2, 3), (4, 5, 6));
+        }
+        assert_eq!(a.duel_round(0, 3, (99, 99, 99), (88, 88, 88)).credit_mbits, [0, 0]);
+        a.generate(Ok([7; 32])).unwrap();
+        b.generate(Ok([7; 32])).unwrap();
+        assert_eq!(a.words(), b.words());
     }
 }

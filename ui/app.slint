@@ -7,6 +7,7 @@ import { AppState, Screen, TrailDot } from "state.slint";
 import { HomeScreen } from "screens/home.slint";
 import { PainterScreen } from "screens/painter.slint";
 import { OutguessScreen } from "screens/outguess.slint";
+import { DuelScreen, DuelOwnerScreen } from "screens/duel.slint";
 import { HuntScreen } from "screens/hunt.slint";
 import { ShardScreen } from "screens/shard.slint";
 import { SummaryScreen } from "screens/summary.slint";
@@ -27,6 +28,8 @@ export component AppWindow inherits Window {
     if AppState.screen == Screen.home: HomeScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.painter: PainterScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.outguess: OutguessScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.duel: DuelScreen { width: parent.width; height: parent.height; }
+    if AppState.screen == Screen.duelowner: DuelOwnerScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.hunt: HuntScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.shard: ShardScreen { width: parent.width; height: parent.height; }
     if AppState.screen == Screen.summary: SummaryScreen { width: parent.width; height: parent.height; }
