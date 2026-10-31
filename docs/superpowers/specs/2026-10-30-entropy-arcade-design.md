@@ -81,6 +81,14 @@ replace the Prime's own master seed.
     error is purely human. Varying the course from a PRNG would leak game randomness into
     the error, the same flaw found in Static Hunt's ghost churn. Visual variety comes from
     the static and colours only.
+13a. **Shard Stack game loop (user feedback, 2026-10-31).** Pieces **fall automatically**
+    (gravity, starting at 700 ms per row and speeding up to 300 ms as lines clear). Swipe down to
+    soft-drop, and the Drop button hard-drops. A piece locks when it can't fall further, and that
+    lock is the placement that gets ranked and credited. There is a next-piece preview, a lines and
+    score readout, and a "Board full, cleared, bits kept" message. The player sees warm-up progress
+    ("Learning your style 7/16") and "Solver predicted you N%" (the best policy's hit rate). The
+    policy-bound health flag fires only when `p_ub > 0.75` after 32 scored pieces: the 0.5/16 rule
+    showed honest players 0 bits for most of a game. Unhealthy still earns 0.
 13. **Shard Stack (added 2026-10-31).** An original falling-block game on an 8×16 board,
     with six "shard" shapes (two 3-cell, four 5-cell). The falling piece comes from a game
     PRNG and earns **no** credit: it is the machine's choice, not the player's. The

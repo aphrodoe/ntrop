@@ -712,6 +712,30 @@ Course rules (`src/glide.rs`):
 - [ ] **Step 4: Verify in the simulator.** Play about 20 rounds, tapping both halves. Check the lock-in hides choices, the reveal, the role swap, and that the meter climbs only with varied play. Screenshot.
 - [ ] **Step 5: Commit:** `"feat: Outguess Duel (2 players, one device)"`
 
+
+### Task 20: Shard Stack game loop (gravity) and honest-credit UX
+
+**Files:** Modify `crates/entropy-core/src/{shard.rs,session.rs}`, `src/main.rs`, `src/shard.rs` (app game state), and `ui/screens/shard.slint`.
+
+- [ ] **Step 1: Core.**
+  - Policy health becomes unhealthy only when `p_ub > 0.75` after 32 scored pieces.
+  - Expose `Session::shard_progress() -> (scored: u32, warmup: u32, predicted_pct: u8)` (`predicted_pct` = best policy hits / n). It is display-only and not secret beyond the board.
+  - Test `shard_honest_human_like_play_earns`: placements drawn from ranks 0..=5 with weights 40/25/15/10/6/4% (a "mostly good" human) over 4 seeds × 120 pieces. Each total must be > 0. Report the numbers.
+  - Keep every habit test passing (each ≤ 3_000).
+- [ ] **Step 2: Gravity loop (app).**
+  - A gravity `slint::Timer` (700 ms per row, minus 40 ms per line cleared, floor 300 ms) moves the piece down one row.
+  - The piece's current row is tracked in app state. Moves and rotations are allowed only if the shape still fits at the current row (use the core's fit check through a display-only `Session::shard_fits(rot, col, row)`).
+  - When it can't fall, lock: call `shard_place(rot, col, t_us)`. The core's hard-drop landing for (rot, col) must equal the current row; assert this in debug builds.
+  - Swipe down = soft drop (one row per 50 ms while held, or one row per swipe step). The Drop button = hard drop.
+  - Show the next piece in a small preview box, plus lines, score (lines²×100) and level.
+  - On overflow, show "Board full, cleared, bits kept".
+  - The timer stops on Done, Home, wipe and new run, the same lifecycle as Static Hunt's timer.
+- [ ] **Step 3: Credit UX.**
+  - During warm-up, the note reads "Learning your style N/16".
+  - After warm-up, show "+X.X bits" or "Too predictable: surprise the solver", plus a small "Solver predicted you N%" line.
+- [ ] **Step 4: Verify in the simulator.** Play at least 30 pieces with varied spots. Report the meter (it must be > 0) and screenshots of gravity mid-fall, the preview and the notes.
+- [ ] **Step 5: Commit:** `"feat: Shard Stack gravity loop and honest-credit UX"`
+
 ---
 
 ## Time budget
